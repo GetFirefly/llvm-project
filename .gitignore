@@ -54,3 +54,6 @@ autoconf/autom4te.cache
 .vs
 # clangd index
 .clangd
+
+# Lumen
+lumen/dist/packages/*.tar.gz

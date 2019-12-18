@@ -124,6 +124,12 @@ protected:
   void InitMCProcessorInfo(StringRef CPU, StringRef TuneCPU, StringRef FS);
 
 public:
+  /// Return the set of features for this target
+  const ArrayRef<SubtargetFeatureKV> getSubtargetFeatures() const;
+
+  /// Return the set of processors for this target
+  const ArrayRef<SubtargetSubTypeKV> getSubtargetSubTypes() const;
+
   /// Set the features to the default for the given CPU and TuneCPU, with ano
   /// appended feature string.
   void setDefaultFeatures(StringRef CPU, StringRef TuneCPU, StringRef FS);

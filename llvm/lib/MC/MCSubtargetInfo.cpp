@@ -234,6 +234,14 @@ MCSubtargetInfo::MCSubtargetInfo(const Triple &TT, StringRef C, StringRef TC,
   InitMCProcessorInfo(CPU, TuneCPU, FS);
 }
 
+const ArrayRef<SubtargetFeatureKV> MCSubtargetInfo::getSubtargetFeatures() const {
+    return ProcFeatures;
+}
+
+const ArrayRef<SubtargetSubTypeKV> MCSubtargetInfo::getSubtargetSubTypes() const {
+    return ProcDesc;
+}
+
 FeatureBitset MCSubtargetInfo::ToggleFeature(uint64_t FB) {
   FeatureBits.flip(FB);
   return FeatureBits;

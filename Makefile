@@ -7,7 +7,8 @@ RELEASE ?= 10.0.0
 CWD = `pwd`
 
 help:
-	@echo "$(IMAGE_NAME) (docs=$(BUILD_DOCS))"
+	@echo "$(IMAGE_NAME):$(RELEASE) (docs=$(BUILD_DOCS))"
+	@echo ""
 	@perl -nle'print $& if m{^[a-zA-Z_-]+:.*?## .*$$}' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
 clean: ## Clean up generated artifacts
@@ -19,32 +20,28 @@ check-mlir:
 	cd build/host && ninja check-mlir
 
 llvm-with-docs: enable-docs ## Build LLVM w/documentation
-	lumen/utils/build-llvm.sh \
+	CC=$(CC) CXX=$(CXX) lumen/utils/dist/build-dist.sh \
+		--release="$(RELEASE)" \
 		--flavor="RelWithDebInfo" \
 		--targets="X86;AArch64;ARM;WebAssembly" \
 		--with-docs \
-		--no-examples \
-		--no-tests \
-		--no-benchmarks \
 		--with-dylib \
+		--link-dylib \
 		--with-assertions \
-		--build-prefix=$(CWD)/build/host \
-		--install-prefix=$(XDG_DATA_HOME)/llvm/lumen \
-		--skip-install
+		--build-dir=$(CWD)/build/host \
+		--skip-install \
+		--skip-dist
 
 
 llvm-without-docs: disable-docs ## Build LLVM w/o documentation
-	lumen/utils/build-llvm.sh \
+	CC=$(CC) CXX=$(CXX) lumen/utils/dist/build-dist.sh \
+		--release="$(RELEASE)" \
 		--flavor="RelWithDebInfo" \
 		--targets="X86;AArch64;ARM;WebAssembly" \
-		--no-docs \
-		--no-examples \
-		--no-tests \
-		--no-benchmarks \
-		--with-dylib \
 		--with-assertions \
-		--build-prefix=$(CWD)/build/host \
-		--install-prefix=$(XDG_DATA_HOME)/llvm/lumen \
+		--build-dir=$(CWD)/build/host \
+		--install-dir=$(XDG_DATA_HOME)/llvm/lumen \
+		--skip-dist
 
 enable-docs:
 	@echo "Configuring Doxygen.."
@@ -60,14 +57,25 @@ disable-docs:
 	@echo "Disabling Doxygen.."
 	@git checkout --quiet llvm/docs/doxygen.cfg.in
 
-dist: ## Build an LLVM release distribution
-	@mkdir -p lumen/dist/ && \
+dist-macos: ## Build an LLVM release distribution for x86_64-apple-darwin
+	@mkdir -p build/packages/ && \
+	CC=$(CC) CXX=$(CXX) lumen/utils/dist/build-dist.sh \
+		--release="$(RELEASE)" \
+		--flavor="Release" \
+		--targets="X86;AArch64;ARM;WebAssembly" \
+		--with-dylib \
+		--build-dir=$(CWD)/build/release \
+		--install-dir=$(CWD)/build/x86_64-apple-darwin \
+		--dist-dir=$(CWD)/build/packages
+
+dist-linux: ## Build an LLVM release distribution for x86_64-unknown-linux
+	@mkdir -p build/packages/ && \
 	cd lumen/ && \
 	docker build \
 		-t llvm-project:dist \
 		--target=dist \
-		--build-arg buildscript_args="-release $(RELEASE)" . && \
-		lumen/dist/extract-release.sh -release $(RELEASE)
+		--build-arg buildscript_args="-release=$(RELEASE)" . && \
+		lumen/utils/dist/extract-release.sh -release $(RELEASE)
 
 docker: ## Build a Docker image containing an LLVM distribution
 	cd lumen/ && \

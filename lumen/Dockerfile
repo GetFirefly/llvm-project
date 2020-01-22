@@ -21,6 +21,7 @@ RUN apt-get update && \
         ca-certificates \
         gnupg \
         build-essential \
+        chrpath \
         libedit-dev \
         libxml2-dev \
         libncurses5-dev \
@@ -53,7 +54,8 @@ RUN mkdir /tmp/cmake-install && \
 
 # Checkout the source code.
 RUN mkdir -p /tmp/sources && \
-    git clone --depth=1 --single-branch https://github.com/lumen/llvm-project /tmp/sources
+    git clone --depth=1 --single-branch --branch lumen https://github.com/lumen/llvm-project /tmp/sources && \
+    git clone --depth=1 --single-branch --branch lumen https://github.com/lumen/mlir /tmp/sources/llvm/projects/mlir
 
 ADD utils/dist /tmp/scripts
 
@@ -63,21 +65,26 @@ RUN mkdir -p /tmp/build && \
     mkdir -p /tmp/install && \
     mkdir -p /tmp/dist && \
     /tmp/scripts/build-dist.sh \
-        -stage 1 \
-        -build-dir /tmp/build \
-        -src-dir /tmp/sources \
-        -install-dir /tmp/install \
-        -dist-dir /tmp/dist \
+        -stage=1 \
+        -flavor=Release \
+        -with-dylib \
+        -build-dir=/tmp/build \
+        -src-dir=/tmp/sources \
+        -install-dir=/tmp/install \
+        -dist-dir=/tmp/dist \
         ${buildscript_args}
 
 # Run the stage2 build. This builds the release compiler and tools.
 # Results of the build will be available at /tmp/install/.
 RUN /tmp/scripts/build-dist.sh \
-        -stage 2 \
-        -build-dir /tmp/build \
-        -src-dir /tmp/sources \
-        -install-dir /tmp/install \
-        -dist-dir /tmp/dist \
+        -stage=2 \
+        -flavor=Release \
+        -with-dylib \
+        -with-static-libc++ \
+        -build-dir=/tmp/build \
+        -src-dir=/tmp/sources \
+        -install-dir=/tmp/install \
+        -dist-dir=/tmp/dist \
         ${buildscript_args}
 
 # Distribution image. Produces a scratch image with the release package

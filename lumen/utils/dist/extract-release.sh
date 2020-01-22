@@ -3,8 +3,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
-DIST_DIR="$(dirname "$SCRIPT_DIR")"
-ROOT_DIR="$(dirname "$DIST_DIR")"
+PACKAGES_DIR="$(cd "$SCRIPT_DIR"/../../build/packages && pwd -P)"
 
 release=""
 
@@ -26,13 +25,13 @@ if [ -z "$release" ]; then
     exit 2
 fi
 
-cd "$DIST_DIR"
+cd "$PACKAGES_DIR"
 if ! id="$(docker create llvm-project:dist sh)"; then
     echo "Could not create dist container!"
     exit 2
 fi
 
-if ! docker cp "${id}":/opt/dist "$DIST_DIR/packages"; then
+if ! docker cp "${id}":/opt/dist "$PACKAGES_DIR"; then
     echo "Could not copy release package!"
     exit 2
 fi

@@ -3,6 +3,10 @@ if (NOT LLVM_ENABLE_PIC)
   return()
 endif()
 
+if (NOT LLVM_BUILD_CPP_DYLIB)
+  return()
+endif()
+
 get_property(llvm_libs GLOBAL PROPERTY LLVM_LIBS)
 list(REMOVE_DUPLICATES llvm_libs)
 # Exclude libLLVMTableGen for the following reasons:

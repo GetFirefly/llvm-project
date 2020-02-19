@@ -12,9 +12,20 @@ help:
 	@perl -nle'print $& if m{^[a-zA-Z_-]+:.*?## .*$$}' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
 clean: ## Clean up generated artifacts
-	@rm -rf build
+	@rm -rf build/host
 
 llvm: llvm-without-docs ## Build LLVM (alias for llvm-without-docs)
+
+llvm-shared: disable-docs ## Build LLVM with BUILD_SHARED_LIBS=ON
+	CC=$(CC) CXX=$(CXX) lumen/utils/dist/build-dist.sh \
+		--release="$(RELEASE)" \
+		--flavor="RelWithDebInfo" \
+		--targets="X86;AArch64;ARM;WebAssembly" \
+		--build-shared \
+		--with-assertions \
+		--build-dir=$(CWD)/build/host \
+		--install-dir=$(XDG_DATA_HOME)/llvm/lumen \
+		--skip-dist
 
 check-mlir:
 	cd build/host && ninja check-mlir

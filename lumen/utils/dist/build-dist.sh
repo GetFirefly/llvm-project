@@ -25,6 +25,7 @@ enable_assertions="OFF"
 enable_build_dylib="OFF"
 enable_link_dylib="OFF"
 enable_static_libcpp=""
+enable_build_shared="OFF"
 skip_build=""
 skip_install=""
 skip_dist=""
@@ -54,45 +55,6 @@ llvm_tools=";llvm-size" # used to prints the size of the linker sections of a pr
 llvm_tools=";llvm-strip" # used to discard symbols from binary files to reduce their size
 llvm_tools=";llvm-ar" # used for creating and modifying archive files
 
-llvm_dylib_components=$(cat <<EOM
-analysis asmparser asmprinter \
-binaryformat bitreader bitstreamreader bitwriter \
-cfguard codegen core \
-debuginfocodeview debuginfodwarf debuginfogsym debuginfomsf debuginfopdb \
-engine \
-ipo irreader \
-libdriver linker lto \
-mc mcjit object option \
-passes profiledata remarks \
-support symbolize \
-textapi transformutils \
-windowsmanifest
-EOM
-)
-
-llvm_dylib_components2=$(cat <<EOM
-aggressiveinstcombine analysis asmparser asmprinter \
-binaryformat bitreader bitstreamreader bitwriter \
-cfguard codegen core coroutines coverage \
-debuginfocodeview debuginfodwarf debuginfogsym debuginfomsf debuginfopdb demangle dlltooldriver dwarflinker \
-engine executionengine \
-frontendopenmp fuzzmutate \
-globalisel \
-instcombine instrumentation interpreter ipo irreader \
-jitlink \
-libdriver lineeditor linker lto \
-mc mca mcdisassembler mcjit mcparser mirparser \
-objcarcopts object objectyaml option orcerror orcjit \
-passes profiledata \
-remarks runtimedyld \
-scalaropts selectiondag support symbolize \
-target textapi transformutils \
-vectorize \
-windowsmanifest \
-xray
-EOM
-)
-llvm_dylib_components="$(echo "$llvm_dylib_components" | sed -e 's/ /;/g')"
 llvm_dylib_components="all"
 
 enable_runtimes="compiler-rt;libcxx;libcxxabi;libunwind"
@@ -133,6 +95,7 @@ function usage() {
     echo " -with-assertions        Enable debug assertions"
     echo " -configure-flags FLAGS  Extra flags to pass to the configure step"
     echo " -with-dylib             Build LLVM dylib"
+    echo " -build-shared           Build shared libraries for all LLVM components"
     echo " -link-dylib             Link LLVM tools against LLVM dylib"
     echo " -with-static-libc++     Statically link the C++ standard library"
     echo " -skip-build             Skip building and go straight to install"
@@ -217,6 +180,9 @@ while [ $# -gt 0 ]; do
         -configure-flags | --configure-flags )
             extra_configure_flags="$rhs"
             has_value="true"
+            ;;
+        -build-shared | --build-shared)
+            enable_build_shared="ON"
             ;;
         -with-dylib | --with-dylib)
             enable_build_dylib="ON"
@@ -416,6 +382,7 @@ function configure_core() {
     local stage_targets="$targets"
     local stage_build_dylib="$enable_build_dylib"
     local stage_link_dylib="$enable_link_dylib"
+    local stage_build_shared="$enable_build_shared"
     local stage_install_toolchain_only="$install_toolchain_only"
     local stage_projects="$enable_projects"
     local stage_runtimes="$enable_runtimes"
@@ -424,6 +391,7 @@ function configure_core() {
         stage_targets="X86"
         stage_link_dylib="OFF"
         stage_build_dylib="OFF"
+        stage_build_shared="OFF"
         stage_install_toolchain_only="ON"
         stage_projects="clang;clang-tools-extra;lld"
         stage_runtimes="compiler-rt;libcxx;libcxxabi"
@@ -465,6 +433,7 @@ function configure_core() {
             -DLLVM_ENABLE_RUNTIMES="$stage_runtimes" \
             -DLLVM_CCACHE_BUILD="${enable_ccache:OFF}" \
             -DLLVM_OPTIMIZED_TABLEGEN="$enable_optimized_tablegen" \
+            -DBUILD_SHARED_LIBS="$stage_build_shared" \
             -DLLVM_DYLIB_COMPONENTS="$llvm_dylib_components" \
             -DLLVM_BUILD_LLVM_DYLIB="$stage_build_dylib" \
             -DLLVM_LINK_LLVM_DYLIB="$stage_link_dylib" \
@@ -479,6 +448,7 @@ function configure_core() {
             -DLLVM_ENABLE_BINDINGS="$enable_bindings" \
             -DLLVM_INCLUDE_EXAMPLES="$enable_examples" \
             -DLLVM_INCLUDE_TESTS="$enable_tests" \
+            -DLLVM_BUILD_TESTS="$enable_tests" \
             -DLLVM_INCLUDE_GO_TESTS="$enable_tests" \
             -DLLVM_INCLUDE_BENCHMARKS="$enable_benchmarks" \
             -DLLVM_ENABLE_ZLIB=OFF \
@@ -497,6 +467,7 @@ function configure_core() {
             -DLLVM_ENABLE_RUNTIMES="$stage_runtimes" \
             -DLLVM_CCACHE_BUILD="${enable_ccache:OFF}" \
             -DLLVM_OPTIMIZED_TABLEGEN="$enable_optimized_tablegen" \
+            -DBUILD_SHARED_LIBS="$stage_build_shared" \
             -DLLVM_DYLIB_COMPONENTS="$llvm_dylib_components" \
             -DLLVM_BUILD_LLVM_DYLIB="$stage_build_dylib" \
             -DLLVM_LINK_LLVM_DYLIB="$stage_link_dylib" \
@@ -511,6 +482,7 @@ function configure_core() {
             -DLLVM_ENABLE_BINDINGS="$enable_bindings" \
             -DLLVM_INCLUDE_EXAMPLES="$enable_examples" \
             -DLLVM_INCLUDE_TESTS="$enable_tests" \
+            -DLLVM_BUILD_TESTS="$enable_tests" \
             -DLLVM_INCLUDE_GO_TESTS="$enable_tests" \
             -DLLVM_INCLUDE_BENCHMARKS="$enable_benchmarks" \
             -DLLVM_ENABLE_ZLIB=OFF \

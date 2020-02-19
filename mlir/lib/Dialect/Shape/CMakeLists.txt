@@ -5,5 +5,5 @@ add_llvm_library(MLIRShape
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Dialect/Shape
   )
-add_dependencies(MLIRShape MLIRShapeOpsIncGen LLVMSupport)
-target_link_libraries(MLIRShape LLVMSupport)
+add_dependencies(MLIRShape MLIRIR MLIRShapeOpsIncGen LLVMSupport)
+target_link_libraries(MLIRShape MLIRIR LLVMSupport)

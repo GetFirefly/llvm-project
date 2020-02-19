@@ -24,7 +24,8 @@ namespace shape {
 class ShapeDialect : public Dialect {
 public:
   /// Create the dialect in the given `context`.
-  explicit ShapeDialect(MLIRContext *context);
+  explicit ShapeDialect(MLIRContext *context)
+      : Dialect("shape", context) {}
 };
 
 namespace ShapeTypes {

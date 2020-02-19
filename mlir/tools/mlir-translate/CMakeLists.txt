@@ -20,5 +20,7 @@ add_llvm_tool(mlir-translate
   mlir-translate.cpp
 )
 llvm_update_compile_flags(mlir-translate)
-whole_archive_link(mlir-translate ${FULL_LIBS})
+if( NOT BUILD_SHARED_LIBS)
+  whole_archive_link(mlir-translate ${FULL_LIBS})
+endif()
 target_link_libraries(mlir-translate PRIVATE MLIRIR MLIRTranslateClParser ${LIBS} LLVMSupport)

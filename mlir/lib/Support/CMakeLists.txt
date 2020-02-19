@@ -42,6 +42,7 @@ add_llvm_library(MLIRJitRunner
   JitRunner.cpp
 )
 target_link_libraries(MLIRJitRunner PRIVATE
+  MLIRAllDialects
   MLIRExecutionEngine
   MLIRIR
   MLIRParser

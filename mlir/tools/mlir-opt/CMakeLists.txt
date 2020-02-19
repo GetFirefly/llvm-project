@@ -4,11 +4,32 @@ set(LLVM_OPTIONAL_SOURCES
 
 set(LIB_LIBS
   MLIRAnalysis
-  MLIRLLVMIR
+  MLIRAllDialects
+  MLIRAffineToStandard
+  MLIRGPUtoCUDATransforms
+  MLIRGPUtoNVVMTransforms
+  MLIRGPUtoROCDLTransforms
+  MLIRGPUtoSPIRVTransforms
+  MLIRGPUtoVulkanTransforms
+  MLIRLinalgTransforms
+  MLIRLinalgToLLVM
+  MLIRLinalgToSPIRVTransforms
+  MLIRLoopsToGPU
+  MLIRLoopToStandard
+  MLIRStandardToLLVM
+  MLIRStandardToSPIRVTransforms
+  MLIRSPIRVTransforms
+  MLIRSPIRVTestPasses
+  MLIRVectorToLLVM
+  MLIRVectorToLoops
   MLIROptLib
   MLIRParser
   MLIRPass
   MLIRTransforms
+  MLIRTestIR
+  MLIRTestPass
+  MLIRTestTransforms
+  MLIRQuantizerTransforms
   MLIRSupport
 )
 add_llvm_library(MLIRMlirOptMain

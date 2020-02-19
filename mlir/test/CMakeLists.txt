@@ -61,12 +61,14 @@ if(MLIR_CUDA_RUNNER_ENABLED)
   )
 endif()
 
-add_lit_testsuite(check-mlir "Running the MLIR regression tests"
-  ${CMAKE_CURRENT_BINARY_DIR}
-  DEPENDS ${MLIR_TEST_DEPENDS}
+if(LLVM_BUILD_TESTS)
+  add_lit_testsuite(check-mlir "Running the MLIR regression tests"
+    ${CMAKE_CURRENT_BINARY_DIR}
+    DEPENDS ${MLIR_TEST_DEPENDS}
   )
-set_target_properties(check-mlir PROPERTIES FOLDER "Tests")
+  set_target_properties(check-mlir PROPERTIES FOLDER "Tests")
 
-add_lit_testsuites(MLIR ${CMAKE_CURRENT_SOURCE_DIR}
-  DEPENDS ${MLIR_TEST_DEPS}
-)
+  add_lit_testsuites(MLIR ${CMAKE_CURRENT_SOURCE_DIR}
+    DEPENDS ${MLIR_TEST_DEPS}
+  )
+endif()

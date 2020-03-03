@@ -78,6 +78,7 @@ RUN mkdir -p /tmp/build && \
 RUN /tmp/scripts/build-dist.sh \
         -stage=2 \
         -flavor=Release \
+        -with-assertions \
         -with-static-libc++ \
         -build-dir=/tmp/build \
         -src-dir=/tmp/sources \

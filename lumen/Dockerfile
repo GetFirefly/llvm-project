@@ -67,7 +67,6 @@ RUN mkdir -p /tmp/build && \
     /tmp/scripts/build-dist.sh \
         -stage=1 \
         -flavor=Release \
-        -with-dylib \
         -build-dir=/tmp/build \
         -src-dir=/tmp/sources \
         -install-dir=/tmp/install \
@@ -79,7 +78,6 @@ RUN mkdir -p /tmp/build && \
 RUN /tmp/scripts/build-dist.sh \
         -stage=2 \
         -flavor=Release \
-        -with-dylib \
         -with-static-libc++ \
         -build-dir=/tmp/build \
         -src-dir=/tmp/sources \

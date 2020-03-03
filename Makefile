@@ -36,8 +36,6 @@ llvm-with-docs: enable-docs ## Build LLVM w/documentation
 		--flavor="RelWithDebInfo" \
 		--targets="X86;AArch64;ARM;WebAssembly" \
 		--with-docs \
-		--with-dylib \
-		--link-dylib \
 		--with-assertions \
 		--build-dir=$(CWD)/build/host \
 		--skip-install \
@@ -74,7 +72,6 @@ dist-macos: ## Build an LLVM release distribution for x86_64-apple-darwin
 		--release="$(RELEASE)" \
 		--flavor="Release" \
 		--targets="X86;AArch64;ARM;WebAssembly" \
-		--with-dylib \
 		--build-dir=$(CWD)/build/release \
 		--install-dir=$(CWD)/build/x86_64-apple-darwin \
 		--dist-dir=$(CWD)/build/packages

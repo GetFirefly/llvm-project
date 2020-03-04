@@ -31,10 +31,10 @@ RUN apt-get update && \
         wget \
         git \
         unzip && \
-    wget "http://ftp.de.debian.org/debian/pool/main/s/swig/swig3.0_3.0.12-2.2_amd64.deb" && \
-    wget "http://ftp.de.debian.org/debian/pool/main/s/swig/swig_3.0.12-2.2_amd64.deb" && \
-    dpkg -i swig3.0_3.0.12-2.2_amd64.deb && \
-    dpkg -i swig_3.0.12-2.2_amd64.deb && \
+    wget "http://http.us.debian.org/debian/pool/main/s/swig/swig_3.0.12-2_amd64.deb" && \
+    wget "http://http.us.debian.org/debian/pool/main/s/swig/swig3.0_3.0.12-2_amd64.deb" && \
+    dpkg -i swig3.0_3.0.12-2_amd64.deb && \
+    dpkg -i swig_3.0.12-2_amd64.deb && \
     rm -rf /var/lib/apt/lists/*
 
 # Install a newer ninja release. It seems the older version in the debian repos
@@ -54,8 +54,7 @@ RUN mkdir /tmp/cmake-install && \
 
 # Checkout the source code.
 RUN mkdir -p /tmp/sources && \
-    git clone --depth=1 --single-branch --branch lumen https://github.com/lumen/llvm-project /tmp/sources && \
-    git clone --depth=1 --single-branch --branch lumen https://github.com/lumen/mlir /tmp/sources/llvm/projects/mlir
+    git clone --depth=1 --single-branch --branch lumen https://github.com/lumen/llvm-project /tmp/sources
 
 ADD utils/dist /tmp/scripts
 

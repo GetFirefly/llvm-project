@@ -3,7 +3,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
-PACKAGES_DIR="$(cd "$SCRIPT_DIR"/../../build/packages && pwd -P)"
+PACKAGES_DIR="$(cd "$SCRIPT_DIR"/../../../build/packages && pwd -P)"
 
 release=""
 
@@ -12,6 +12,7 @@ while [ $# -gt 0 ]; do
         -release | --release )
             shift
             release="$1"
+            shift
             ;;
         *)
             echo "unknown option: $1"

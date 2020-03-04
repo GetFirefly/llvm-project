@@ -30,8 +30,11 @@ RUN apt-get update && \
         python \
         wget \
         git \
-        unzip \
-        swig3.0 && \
+        unzip && \
+    wget "http://http.us.debian.org/debian/pool/main/s/swig/swig_3.0.12-2_amd64.deb" && \
+    wget "http://http.us.debian.org/debian/pool/main/s/swig/swig3.0_3.0.12-2_amd64.deb" && \
+    dpkg -i swig3.0_3.0.12-2_amd64.deb && \
+    dpkg -i swig_3.0.12-2_amd64.deb && \
     rm -rf /var/lib/apt/lists/*
 
 # Install a newer ninja release. It seems the older version in the debian repos

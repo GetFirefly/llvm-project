@@ -67,7 +67,7 @@ disable-docs:
 	@git checkout --quiet llvm/docs/doxygen.cfg.in
 
 dist-macos: ## Build an LLVM release distribution for x86_64-apple-darwin
-	@mkdir -p build/packages/ && \
+	@mkdir -p build/packages/dist && \
 	CC=$(CC) CXX=$(CXX) lumen/utils/dist/build-dist.sh \
 		--release="$(RELEASE)" \
 		--flavor="Release" \
@@ -75,7 +75,7 @@ dist-macos: ## Build an LLVM release distribution for x86_64-apple-darwin
 		--with-assertions \
 		--build-dir=$(CWD)/build/release \
 		--install-dir=$(CWD)/build/x86_64-apple-darwin \
-		--dist-dir=$(CWD)/build/packages
+		--dist-dir=$(CWD)/build/packages/dist
 
 dist-linux: ## Build an LLVM release distribution for x86_64-unknown-linux
 	@mkdir -p build/packages/ && \
@@ -84,7 +84,7 @@ dist-linux: ## Build an LLVM release distribution for x86_64-unknown-linux
 		-t llvm-project:dist \
 		--target=dist \
 		--build-arg buildscript_args="-release=$(RELEASE)" . && \
-		lumen/utils/dist/extract-release.sh -release $(RELEASE)
+		utils/dist/extract-release.sh -release $(RELEASE)
 
 docker: ## Build a Docker image containing an LLVM distribution
 	cd lumen/ && \

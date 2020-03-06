@@ -1,7 +1,7 @@
 .PHONY: help llvm llvm-with-docs dist docker enable-docs disable-docs
 
 IMAGE_NAME ?= llvm
-XDG_DATA_HOME ?= ~/.local/share
+XDG_DATA_HOME ?= $(HOME)/.local/share
 BUILD_DOCS ?= OFF
 RELEASE ?= 10.0.0
 CWD = `pwd`

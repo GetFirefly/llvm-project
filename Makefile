@@ -28,7 +28,7 @@ llvm-shared: disable-docs ## Build LLVM with BUILD_SHARED_LIBS=ON
 		--skip-dist
 
 check-mlir:
-	cd build/host && ninja check-mlir
+	cd build/host/stage2/RelWithDebInfo/stage2-$(RELEASE).obj && ninja check-mlir
 
 llvm-with-docs: enable-docs ## Build LLVM w/documentation
 	CC=$(CC) CXX=$(CXX) lumen/utils/dist/build-dist.sh \

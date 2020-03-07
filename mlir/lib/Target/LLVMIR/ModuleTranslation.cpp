@@ -25,6 +25,8 @@
 
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Frontend/OpenMP/OMPIRBuilder.h"
+#include "llvm/IR/Attributes.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Constants.h"
@@ -717,6 +719,7 @@ LogicalResult ModuleTranslation::convertGlobals() {
     }
 
     auto linkage = convertLinkageToLLVM(op.linkage());
+    auto tlsMode = convertThreadLocalModeToLLVM(op.tls_mode());
     bool anyExternalLinkage =
         ((linkage == llvm::GlobalVariable::ExternalLinkage &&
           isa<llvm::UndefValue>(cst)) ||
@@ -725,7 +728,7 @@ LogicalResult ModuleTranslation::convertGlobals() {
     auto *var = new llvm::GlobalVariable(
         *llvmModule, type, op.constant(), linkage,
         anyExternalLinkage ? nullptr : cst, op.sym_name(),
-        /*InsertBefore=*/nullptr, llvm::GlobalValue::NotThreadLocal, addrSpace);
+        /*InsertBefore=*/nullptr, tlsMode, addrSpace);
 
     globalsMapping.try_emplace(op, var);
   }

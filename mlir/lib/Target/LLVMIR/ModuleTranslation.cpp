@@ -337,7 +337,10 @@ LogicalResult ModuleTranslation::convertOperation(Operation &opInst,
       return success();
     }
     // Check that LLVM call returns void for 0-result functions.
-    return success(result->getType()->isVoidTy());
+    if (!result->getType()->isVoidTy()) {
+      return opInst.emitError("expected callee to return void");
+    }
+    return success();
   }
 
   if (auto invOp = dyn_cast<LLVM::InvokeOp>(opInst)) {

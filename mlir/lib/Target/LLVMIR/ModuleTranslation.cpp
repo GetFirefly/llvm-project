@@ -303,12 +303,29 @@ LogicalResult ModuleTranslation::convertOperation(Operation &opInst,
   auto convertCall = [this, &builder](Operation &op) -> llvm::Value * {
     auto operands = lookupValues(op.getOperands());
     ArrayRef<llvm::Value *> operandsRef(operands);
+    llvm::Value *callV;
     if (auto attr = op.getAttrOfType<FlatSymbolRefAttr>("callee")) {
-      return builder.CreateCall(functionMapping.lookup(attr.getValue()),
+      callV = builder.CreateCall(functionMapping.lookup(attr.getValue()),
                                 operandsRef);
     } else {
-      return builder.CreateCall(operandsRef.front(), operandsRef.drop_front());
+      callV = builder.CreateCall(operandsRef.front(), operandsRef.drop_front());
     }
+    auto callInst = static_cast<llvm::CallInst *>(callV);
+    if (op.getAttrOfType<UnitAttr>("tail")) {
+      callInst->setTailCall(true);
+    } else if (op.getAttrOfType<UnitAttr>("musttail")) {
+      callInst->setTailCallKind(llvm::CallInst::TailCallKind::TCK_MustTail);
+    }
+    for (auto namedAttr : op.getAttrs()) {
+      if (auto fnAttr = namedAttr.second.dyn_cast_or_null<UnitAttr>()) {
+        StringRef fnAttrKindName = namedAttr.first.strref();
+        auto fnAttrKind = llvm::Attribute::getAttrKindFromName(fnAttrKindName);
+        if (fnAttrKind != llvm::Attribute::None) {
+          callInst->addAttribute(llvm::AttributeList::FunctionIndex, fnAttrKind);
+        }
+      }
+    }
+    return callInst;
   };
 
   // Emit calls.  If the called function has a result, remap the corresponding

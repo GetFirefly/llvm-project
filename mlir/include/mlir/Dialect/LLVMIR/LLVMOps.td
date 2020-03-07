@@ -630,6 +630,26 @@ def Linkage : LLVM_EnumAttr<
   let cppNamespace = "::mlir::LLVM";
 }
 
+def ThreadLocalModeNotThreadLocal
+    : LLVM_EnumAttrCase<"NotThreadLocal", "not_thread_local", "NotThreadLocal", 0>;
+def ThreadLocalModeGeneralDynamic
+    : LLVM_EnumAttrCase<"GeneralDynamic", "general_dynamic", "GeneralDynamicTLSModel", 1>;
+def ThreadLocalModeLocalDynamic
+    : LLVM_EnumAttrCase<"LocalDynamic", "local_dynamic", "LocalDynamicTLSModel", 2>;
+def ThreadLocalModeInitialExec
+    : LLVM_EnumAttrCase<"InitialExec", "initial_exec", "InitialExecTLSModel", 3>;
+def ThreadLocalModeLocalExec
+    : LLVM_EnumAttrCase<"LocalExec", "local_exec", "LocalExecTLSModel", 4>;
+
+def ThreadLocalMode : LLVM_EnumAttr<
+    "ThreadLocalMode",
+    "::llvm::GlobalValue::ThreadLocalMode",
+    "LLVM thread local mode",
+    [ThreadLocalModeNotThreadLocal,
+     ThreadLocalModeGeneralDynamic, ThreadLocalModeLocalDynamic,
+     ThreadLocalModeInitialExec, ThreadLocalModeLocalExec]> {
+  let cppNamespace = "::mlir::LLVM";
+}
 
 def LLVM_AddressOfOp
     : LLVM_OneResultOp<"mlir.addressof">,
@@ -677,6 +697,7 @@ def LLVM_GlobalOp
     UnitAttr:$constant,
     StrAttr:$sym_name,
     Linkage:$linkage,
+    ThreadLocalMode:$tls_mode,
     OptionalAttr<AnyAttr>:$value,
     DefaultValuedAttr<Confined<I32Attr, [IntNonNegative]>, "0">:$addr_space
   );
@@ -699,9 +720,23 @@ def LLVM_GlobalOp
 
   let builders = [
     OpBuilder<"OpBuilder &builder, OperationState &result, LLVMType type, "
+              "bool isConstant, Linkage linkage, ThreadLocalMode tlsMode, StringRef name, "
+              "Attribute value, unsigned addrSpace = 0, "
+              "ArrayRef<NamedAttribute> attrs = {}">,
+    OpBuilder<"OpBuilder &builder, OperationState &result, LLVMType type, "
               "bool isConstant, Linkage linkage, StringRef name, "
               "Attribute value, unsigned addrSpace = 0, "
-              "ArrayRef<NamedAttribute> attrs = {}">
+              "ArrayRef<NamedAttribute> attrs = {}",
+              [{ build(builder,
+                       result,
+                       type,
+                       isConstant,
+                       linkage,
+                       ThreadLocalMode::NotThreadLocal,
+                       name,
+                       value,
+                       addrSpace,
+                       attrs); }]>,
   ];
 
   let extraClassDeclaration = [{

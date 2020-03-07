@@ -912,9 +912,14 @@ static LogicalResult verify(AddressOfOp op) {
 /// the name of the attribute in ODS.
 static StringRef getLinkageAttrName() { return "linkage"; }
 
+/// Returns the name used for the TLS attribute. This *must* correspond to
+/// the name of the attribute in ODS.
+static StringRef getThreadLocalModeAttrName() { return "tls_mode"; }
+
+
 void GlobalOp::build(Builder *builder, OperationState &result, LLVMType type,
-                     bool isConstant, Linkage linkage, StringRef name,
-                     Attribute value, unsigned addrSpace,
+                     bool isConstant, Linkage linkage, ThreadLocalMode tlsMode,
+                     StringRef name, Attribute value, unsigned addrSpace,
                      ArrayRef<NamedAttribute> attrs) {
   result.addAttribute(SymbolTable::getSymbolAttrName(),
                       builder->getStringAttr(name));
@@ -925,6 +930,8 @@ void GlobalOp::build(Builder *builder, OperationState &result, LLVMType type,
     result.addAttribute("value", value);
   result.addAttribute(getLinkageAttrName(), builder->getI64IntegerAttr(
                                                 static_cast<int64_t>(linkage)));
+  result.addAttribute(getThreadLocalModeAttrName(), builder->getI64IntegerAttr(
+                                                static_cast<int64_t>(tlsMode)));
   if (addrSpace != 0)
     result.addAttribute("addr_space", builder->getI32IntegerAttr(addrSpace));
   result.attributes.append(attrs.begin(), attrs.end());
@@ -933,6 +940,9 @@ void GlobalOp::build(Builder *builder, OperationState &result, LLVMType type,
 
 static void printGlobalOp(OpAsmPrinter &p, GlobalOp op) {
   p << op.getOperationName() << ' ' << stringifyLinkage(op.linkage()) << ' ';
+  auto tlsMode = op.tls_mode();
+  if (tlsMode != ThreadLocalMode::NotThreadLocal)
+    p << stringifyThreadLocalMode(tlsMode) << ' ';
   if (op.constant())
     p << "constant ";
   p.printSymbolName(op.sym_name());
@@ -942,7 +952,7 @@ static void printGlobalOp(OpAsmPrinter &p, GlobalOp op) {
   p << ')';
   p.printOptionalAttrDict(op.getAttrs(),
                           {SymbolTable::getSymbolAttrName(), "type", "constant",
-                           "value", getLinkageAttrName()});
+                           "value", getLinkageAttrName(), getThreadLocalModeAttrName()});
 
   // Print the trailing type unless it's a string global.
   if (op.getValueOrNull().dyn_cast_or_null<StringAttr>())
@@ -976,6 +986,7 @@ template <typename Ty> struct EnumTraits {};
   }
 
 REGISTER_ENUM_TYPE(Linkage);
+REGISTER_ENUM_TYPE(ThreadLocalMode);
 } // end namespace
 
 template <typename EnumTy>
@@ -983,7 +994,7 @@ static ParseResult parseOptionalLLVMKeyword(OpAsmParser &parser,
                                             OperationState &result,
                                             StringRef name) {
   SmallVector<StringRef, 10> names;
-  for (unsigned i = 0, e = getMaxEnumValForLinkage(); i <= e; ++i)
+  for (unsigned i = 0, e = EnumTraits<EnumTy>::getMaxEnumVal(); i <= e; ++i)
     names.push_back(EnumTraits<EnumTy>::stringify(static_cast<EnumTy>(i)));
 
   int index = parseOptionalKeywordAlternative(parser, names);
@@ -993,7 +1004,7 @@ static ParseResult parseOptionalLLVMKeyword(OpAsmParser &parser,
   return success();
 }
 
-// operation ::= `llvm.mlir.global` linkage `constant`? `@` identifier
+// operation ::= `llvm.mlir.global` linkage tls-mode? `constant`? `@` identifier
 //               `(` attribute? `)` attribute-list? (`:` type)? region?
 //
 // The type can be omitted for string attributes, in which case it will be
@@ -1002,6 +1013,8 @@ static ParseResult parseGlobalOp(OpAsmParser &parser, OperationState &result) {
   if (failed(parseOptionalLLVMKeyword<Linkage>(parser, result,
                                                getLinkageAttrName())))
     return parser.emitError(parser.getCurrentLocation(), "expected linkage");
+
+  parseOptionalLLVMKeyword<ThreadLocalMode>(parser, result, getThreadLocalModeAttrName());
 
   if (succeeded(parser.parseOptionalKeyword("constant")))
     result.addAttribute("constant", parser.getBuilder().getUnitAttr());

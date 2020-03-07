@@ -384,7 +384,9 @@ GlobalOp Importer::processGlobal(llvm::GlobalVariable *GV) {
     return nullptr;
   GlobalOp op = b.create<GlobalOp>(
       UnknownLoc::get(context), type, GV->isConstant(),
-      convertLinkageFromLLVM(GV->getLinkage()), GV->getName(), valueAttr);
+      convertLinkageFromLLVM(GV->getLinkage()), 
+      convertThreadLocalModeFromLLVM(GV->getThreadLocalMode()),
+      GV->getName(), valueAttr);
   if (GV->hasInitializer() && !valueAttr) {
     Region &r = op.getInitializerRegion();
     currentEntryBlock = b.createBlock(&r);

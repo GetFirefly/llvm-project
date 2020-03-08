@@ -398,7 +398,7 @@ function configure_core() {
         stage_projects="clang;clang-tools-extra;lld"
         stage_runtimes="compiler-rt;libcxx;libcxxabi"
     else
-        extra_configure_flags="-DLLVM_BUILD_UTILS=ON -DLLVM_INSTALL_UTILS=ON"
+        extra_configure_flags="-DLLVM_BUILD_UTILS=ON -DLLVM_INSTALL_UTILS=ON $extra_configure_flags"
         if [[ ! "$triple" =~ apple ]]; then
             extra_configure_flags="-DLLVM_ENABLE_LLD=ON $extra_configure_flags"
         fi
@@ -515,6 +515,10 @@ function build_core() {
     echo "# ninja install"
     DESTDIR="${dest_dir}" ninja install \
         2>&1 | tee "$log_dir/llvm.install-stage${current_stage}-${current_flavor}.log"
+
+    echo "# Installing FileCheck"
+    echo "# cp -f bin/FileCheck \"${dest_dir}/usr/local/bin/\""
+    cp -f bin/FileCheck "${dest_dir}/usr/local/bin/"
 
     cd "$build_dir"
 }

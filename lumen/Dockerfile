@@ -52,6 +52,9 @@ RUN mkdir /tmp/cmake-install && \
     tar -xzf cmake-${CMAKE_VERSION}-Linux-x86_64.tar.gz -C /usr/local --strip-components=1 && \
     cd / && rm -rf /tmp/cmake-install
 
+FROM builder AS stage1
+ARG buildscript_args
+
 # Checkout the source code.
 RUN mkdir -p /tmp/sources && \
     git clone --depth=1 --single-branch --branch lumen https://github.com/lumen/llvm-project /tmp/sources
@@ -59,7 +62,6 @@ RUN mkdir -p /tmp/sources && \
 ADD utils/dist /tmp/scripts
 
 # Run the stage1 build. This bootstraps the clang compiler.
-ARG buildscript_args
 RUN mkdir -p /tmp/build && \
     mkdir -p /tmp/install && \
     mkdir -p /tmp/dist && \
@@ -87,7 +89,7 @@ RUN /tmp/scripts/build-dist.sh \
 
 # Distribution image. Produces a scratch image with the release package
 FROM scratch AS dist
-COPY --from=builder /tmp/dist /opt/dist
+COPY --from=stage1 /tmp/dist /opt/dist
 
 # Stage 2. Produce a minimal release image with build results.
 FROM launcher.gcr.io/google/debian9:latest AS release
@@ -100,5 +102,5 @@ RUN apt-get update && \
         binutils && \
     rm -rf /var/lib/apt/lists/*
 # Copy build results of stage 1 to /usr/local.
-COPY --from=builder /tmp/install/ /usr/local/
+COPY --from=stage1 /tmp/install/ /usr/local/
 ENTRYPOINT ["bash"]

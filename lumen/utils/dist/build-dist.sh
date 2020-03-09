@@ -27,6 +27,7 @@ enable_link_dylib="OFF"
 enable_static_libcpp=""
 enable_build_shared="OFF"
 skip_build=""
+clean_obj=""
 skip_install=""
 skip_dist=""
 enable_ccache="OFF"
@@ -103,6 +104,7 @@ function usage() {
     echo " -skip-build             Skip building and go straight to install"
     echo " -skip-install           Do not perform install step at end of build"
     echo " -skip-dist              Do build a distribution package"
+    echo " -clean-obj              Remove obj directory after build is complete"
     echo " -with-docs              Build documentation"
     echo " -no-docs                Do not build documentation"
     echo " -with-examples          Build examples"
@@ -204,6 +206,9 @@ while [ $# -gt 0 ]; do
             ;;
         -skip-dist | --skip-dist)
             skip_dist="true"
+            ;;
+        -clean-obj | --clean-obj)
+            clean_obj="true"
             ;;
         -with-docs | --with-docs)
             enable_docs="ON"
@@ -637,7 +642,11 @@ else
             configure_core 1 $flavor "$stage1_objdir"
             build_core 1 $flavor "$stage1_objdir" "$stage1_destdir"
             clean_RPATH "${stage1_destdir}/usr/local"
-            ;;
+
+            if [ "${clean_obj}" = "true" ]; then
+                rm -rf "${stage1_objdir}"
+            fi
+        ;;
         2)
             if [ -z "$skip_build" ]; then
                 echo "# Stage 2: Preparing Build Enviornment"
@@ -664,6 +673,10 @@ else
                 configure_core 2 $flavor "$stage2_objdir"
                 build_core 2 $flavor "$stage2_objdir" "$stage2_destdir"
                 clean_RPATH "${stage2_destdir}/usr/local"
+
+                if [ "${clean_obj}" = "true" ]; then
+                    rm -rf "${stage2_objdir}"
+                fi
             else
                 if [ ! -d "$stage2_destdir" ]; then
                     echo "# Unable to skip build! Previous stage 2 build doesn't exist"

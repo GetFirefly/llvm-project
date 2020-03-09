@@ -75,7 +75,8 @@ dist-macos: ## Build an LLVM release distribution for x86_64-apple-darwin
 		--with-assertions \
 		--build-dir=$(CWD)/build/release \
 		--install-dir=$(CWD)/build/x86_64-apple-darwin \
-		--dist-dir=$(CWD)/build/packages/dist
+		--dist-dir=$(CWD)/build/packages/dist \
+		--clean-obj
 
 dist-linux: ## Build an LLVM release distribution for x86_64-unknown-linux
 	@mkdir -p build/packages/ && \
@@ -83,7 +84,7 @@ dist-linux: ## Build an LLVM release distribution for x86_64-unknown-linux
 	docker build \
 		-t llvm-project:dist \
 		--target=dist \
-		--build-arg buildscript_args="-release=$(RELEASE)" . && \
+		--build-arg buildscript_args="-release=$(RELEASE) -clean-obj" . && \
 		utils/dist/extract-release.sh -release $(RELEASE)
 
 docker: ## Build a Docker image containing an LLVM distribution

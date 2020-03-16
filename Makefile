@@ -4,12 +4,13 @@ IMAGE_NAME ?= llvm
 XDG_DATA_HOME ?= $(HOME)/.local/share
 BUILD_DOCS ?= OFF
 RELEASE ?= 10.0.0
+SHA ?= `git rev-parse --short HEAD`
 CWD = `pwd`
 
 help:
-	@echo "$(IMAGE_NAME):$(RELEASE) (docs=$(BUILD_DOCS))"
+	@echo "$(IMAGE_NAME):$(RELEASE)-$(SHA) (docs=$(BUILD_DOCS))"
 	@echo ""
-	@perl -nle'print $& if m{^[a-zA-Z_-]+:.*?## .*$$}' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+	@perl -nle'print $& if m{^[a-zA-Z_-]+:.*?## .*$$}' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 clean: ## Clean up generated artifacts
 	@rm -rf build/host
@@ -82,10 +83,10 @@ dist-linux: ## Build an LLVM release distribution for x86_64-unknown-linux
 	@mkdir -p build/packages/ && \
 	cd lumen/ && \
 	docker build \
-		-t llvm-project:dist \
+		-t llvm-project:dist-$(RELEASE)-$(SHA) \
 		--target=dist \
 		--build-arg buildscript_args="-release=$(RELEASE) -clean-obj" . && \
-		utils/dist/extract-release.sh -release $(RELEASE)
+		utils/dist/extract-release.sh -release $(RELEASE) -sha $(SHA)
 
 docker: ## Build a Docker image containing an LLVM distribution
 	cd lumen/ && \

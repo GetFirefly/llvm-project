@@ -6,12 +6,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 PACKAGES_DIR="$(cd "$SCRIPT_DIR"/../../../build/packages && pwd -P)"
 
 release=""
+sha=""
 
 while [ $# -gt 0 ]; do
     case $1 in
         -release | --release )
             shift
             release="$1"
+            shift
+            ;;
+        -sha | --sha )
+            shift
+            sha="$1"
             shift
             ;;
         *)
@@ -26,8 +32,13 @@ if [ -z "$release" ]; then
     exit 2
 fi
 
+if [ -z "$sha" ]; then
+    echo "error: no sha hash specified"
+    exit 2
+fi
+
 cd "$PACKAGES_DIR"
-if ! id="$(docker create llvm-project:dist sh)"; then
+if ! id="$(docker create llvm-project:dist-${release}-${sha} sh)"; then
     echo "Could not create dist container!"
     exit 2
 fi

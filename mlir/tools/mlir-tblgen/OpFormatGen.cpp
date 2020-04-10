@@ -814,7 +814,7 @@ void OperationFormat::genParserVariadicSegmentResolution(Operator &op,
                                                          OpMethodBody &body) {
   if (!allOperands && op.getTrait("OpTrait::AttrSizedOperandSegments")) {
     body << "  result.addAttribute(\"operand_segment_sizes\", "
-         << "builder.getI32VectorAttr({";
+         << "parser.getBuilder().getI32VectorAttr({";
     auto interleaveFn = [&](const NamedTypeConstraint &operand) {
       // If the operand is variadic emit the parsed size.
       if (operand.isVariadic())

@@ -316,25 +316,45 @@ ModuleTranslation::~ModuleTranslation() {
 
 /// Get the SSA value passed to the current block from the terminator operation
 /// of its predecessor.
-static Value getPHISourceValue(Block *current, Block *pred,
+static Optional<Value> getPHISourceValue(Block *current, Operation &terminator,
                                unsigned numArguments, unsigned index) {
-  Operation &terminator = *pred->getTerminator();
   if (isa<LLVM::BrOp>(terminator))
     return terminator.getOperand(index);
 
   // For conditional branches, we need to check if the current block is reached
   // through the "true" or the "false" branch and take the relevant operands.
-  auto condBranchOp = dyn_cast<LLVM::CondBrOp>(terminator);
-  assert(condBranchOp &&
-         "only branch operations can be terminators of a block that "
-         "has successors");
-  assert((condBranchOp.getSuccessor(0) != condBranchOp.getSuccessor(1)) &&
-         "successors with arguments in LLVM conditional branches must be "
-         "different blocks");
-
-  return condBranchOp.getSuccessor(0) == current
+  if (auto condBranchOp = dyn_cast<LLVM::CondBrOp>(terminator)) {
+    assert((condBranchOp.getSuccessor(0) != condBranchOp.getSuccessor(1)) &&
+            "successors with arguments in LLVM conditional branches must be "
+            "different blocks");
+    return condBranchOp.getSuccessor(0) == current
              ? condBranchOp.trueDestOperands()[index]
              : condBranchOp.falseDestOperands()[index];
+  }
+
+  if (auto invokeOp = dyn_cast<LLVM::InvokeOp>(terminator)) {
+    assert((invokeOp.getSuccessor(0) != invokeOp.getSuccessor(1)) &&
+            "successors with arguments in LLVM invokes must be "
+            "different blocks");
+    if (invokeOp.getSuccessor(0) == current) {
+      CallOpInterface coi = dyn_cast<CallOpInterface>(terminator);
+      Operation *callableOp = coi.resolveCallable();
+      CallableOpInterface callable = dyn_cast<CallableOpInterface>(callableOp);
+
+      bool hasResult = callable.getCallableResults().size() != 0;
+      // We've already mapped the phi node for the result value
+      if (index == 0 && hasResult)
+        return llvm::None;
+      else
+        return invokeOp.normalDestOperands()[index];
+    } else {
+      return invokeOp.unwindDestOperands()[index];
+    }
+  }
+
+  assert(false &&
+         "only branch operations or invoke can be terminators of a block that "
+         "has successors");
 }
 
 /// Connect the PHI nodes to the results of preceding blocks.
@@ -354,9 +374,10 @@ connectPHINodes(T &func, const DenseMap<Value, llvm::Value *> &valueMapping,
       auto &phiNode = numberedPhiNode.value();
       unsigned index = numberedPhiNode.index();
       for (auto *pred : bb->getPredecessors()) {
-        phiNode.addIncoming(valueMapping.lookup(getPHISourceValue(
-                                bb, pred, numArguments, index)),
-                            blockMapping.lookup(pred));
+        Operation &terminator = *pred->getTerminator();
+        auto sourceVal = getPHISourceValue(bb, terminator, numArguments, index);
+        if (sourceVal)
+            phiNode.addIncoming(valueMapping.lookup(sourceVal.getValue()), blockMapping.lookup(pred));
       }
     }
   }
@@ -419,7 +440,9 @@ ModuleTranslation::convertOmpParallel(Operation &opInst,
         codeGenIPBBTI->setSuccessor(0, curLLVMBB);
 
       // TODO: Error not returned up the hierarchy
-      if (failed(convertBlock(*bb, /*ignoreArguments=*/indexedBB.index() == 0)))
+      if (failed(prepareBlock(*bb, /*ignoreArguments=*/indexedBB.index() == 0)))
+        return;
+      if (failed(convertBlock(*bb)))
         return;
 
       // If this block has the terminator then add a jump to
@@ -584,8 +607,12 @@ LogicalResult ModuleTranslation::convertOperation(Operation &opInst,
   if (auto invOp = dyn_cast<LLVM::InvokeOp>(opInst)) {
     auto operands = lookupValues(opInst.getOperands());
     ArrayRef<llvm::Value *> operandsRef(operands);
+    llvm::InvokeInst *invokeInst;
+    bool invokeHasResult = false;
     if (auto attr = opInst.getAttrOfType<FlatSymbolRefAttr>("callee")) {
-      builder.CreateInvoke(functionMapping.lookup(attr.getValue()),
+      auto calleeFn = functionMapping.lookup(attr.getValue());
+      invokeHasResult = calleeFn->getReturnType()->isVoidTy() == false;
+      invokeInst = builder.CreateInvoke(calleeFn,
                            blockMapping[invOp.getSuccessor(0)],
                            blockMapping[invOp.getSuccessor(1)], operandsRef);
     } else {
@@ -593,9 +620,31 @@ LogicalResult ModuleTranslation::convertOperation(Operation &opInst,
           cast<llvm::PointerType>(operandsRef.front()->getType());
       auto *calleeType =
           cast<llvm::FunctionType>(calleePtrType->getElementType());
-      builder.CreateInvoke(
+      invokeHasResult = calleeType->getReturnType()->isVoidTy() == false;
+      invokeInst = builder.CreateInvoke(
           calleeType, operandsRef.front(), blockMapping[invOp.getSuccessor(0)],
           blockMapping[invOp.getSuccessor(1)], operandsRef.drop_front());
+    }
+    // Apply any attributes found
+    for (auto namedAttr : invOp.getAttrs()) {
+      if (auto fnAttr = namedAttr.second.dyn_cast_or_null<UnitAttr>()) {
+        StringRef fnAttrKindName = namedAttr.first.strref();
+        auto fnAttrKind = llvm::Attribute::getAttrKindFromName(fnAttrKindName);
+        if (fnAttrKind != llvm::Attribute::None) {
+          invokeInst->addAttribute(llvm::AttributeList::FunctionIndex, fnAttrKind);
+        }
+      }
+    }
+    // Remap the result value. Note that LLVM IR InvokeOp has either 0 or 1 result.
+    if (invokeHasResult) {
+      auto normalBlock = blockMapping[invOp.getSuccessor(0)];
+      auto phis = normalBlock->phis();
+      auto &resultPhi = *phis.begin();
+      resultPhi.addIncoming((llvm::Value *)invokeInst, blockMapping[opInst.getBlock()]);
+      return success();
+    } else if (!invokeInst->getType()->isVoidTy()) {
+      // Check that LLVM call returns void for 0-result functions
+      return opInst.emitError("expected callee to return void");
     }
     return success();
   }
@@ -666,12 +715,12 @@ LogicalResult ModuleTranslation::convertOperation(Operation &opInst,
          << opInst.getName();
 }
 
+
 /// Convert block to LLVM IR.  Unless `ignoreArguments` is set, emit PHI nodes
 /// to define values corresponding to the MLIR block arguments.  These nodes
 /// are not connected to the source basic blocks, which may not exist yet.
-LogicalResult ModuleTranslation::convertBlock(Block &bb, bool ignoreArguments) {
+LogicalResult ModuleTranslation::prepareBlock(Block &bb, bool ignoreArguments) {
   llvm::IRBuilder<> builder(blockMapping[&bb]);
-  auto *subprogram = builder.GetInsertBlock()->getParent()->getSubprogram();
 
   // Before traversing operations, make block arguments available through
   // value remapping and PHI nodes, but do not add incoming edges for the PHI
@@ -693,6 +742,16 @@ LogicalResult ModuleTranslation::convertBlock(Block &bb, bool ignoreArguments) {
       valueMapping[arg] = phi;
     }
   }
+
+  return success();
+}
+
+/// Convert block to LLVM IR.  Unless `ignoreArguments` is set, emit PHI nodes
+/// to define values corresponding to the MLIR block arguments.  These nodes
+/// are not connected to the source basic blocks, which may not exist yet.
+LogicalResult ModuleTranslation::convertBlock(Block &bb) {
+  llvm::IRBuilder<> builder(blockMapping[&bb]);
+  auto *subprogram = builder.GetInsertBlock()->getParent()->getSubprogram();
 
   // Traverse operations.
   for (auto &op : bb) {
@@ -881,20 +940,23 @@ LogicalResult ModuleTranslation::convertOneFunction(LLVMFuncOp func) {
       llvmFunc->setPersonalityFn(pfunc);
   }
 
-  // First, create all blocks so we can jump to them.
+  // First, create all blocks so we can jump to them; (in topological order 
+  // to ensure defs are converted before uses)
+  auto blocks = topologicalSort(func);
   llvm::LLVMContext &llvmContext = llvmFunc->getContext();
-  for (auto &bb : func) {
+  for (auto &indexedBB : llvm::enumerate(blocks)) {
+    auto *bb = indexedBB.value();
     auto *llvmBB = llvm::BasicBlock::Create(llvmContext);
     llvmBB->insertInto(llvmFunc);
-    blockMapping[&bb] = llvmBB;
+    blockMapping[bb] = llvmBB;
+    if (failed(prepareBlock(*bb, /*ignoreArguments=*/indexedBB.index() == 0)))
+      return failure();
   }
 
-  // Then, convert blocks one by one in topological order to ensure defs are
-  // converted before uses.
-  auto blocks = topologicalSort(func);
+  // Then, convert blocks one by one
   for (auto indexedBB : llvm::enumerate(blocks)) {
     auto *bb = indexedBB.value();
-    if (failed(convertBlock(*bb, /*ignoreArguments=*/indexedBB.index() == 0)))
+    if (failed(convertBlock(*bb)))
       return failure();
   }
 

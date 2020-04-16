@@ -110,7 +110,8 @@ private:
   LogicalResult convertFunctions();
   LogicalResult convertGlobals();
   LogicalResult convertOneFunction(LLVMFuncOp func);
-  LogicalResult convertBlock(Block &bb, bool ignoreArguments);
+  LogicalResult prepareBlock(Block &bb, bool ignoreArguments);
+  LogicalResult convertBlock(Block &bb);
 
   llvm::Constant *getLLVMConstant(llvm::Type *llvmType, Attribute attr,
                                   Location loc);

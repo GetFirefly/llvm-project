@@ -375,14 +375,34 @@ LogicalResult ModuleTranslation::convertOperation(Operation &opInst,
   if (auto invOp = dyn_cast<LLVM::InvokeOp>(opInst)) {
     auto operands = lookupValues(opInst.getOperands());
     ArrayRef<llvm::Value *> operandsRef(operands);
+    llvm::InvokeInst *invokeInst;
     if (auto attr = opInst.getAttrOfType<FlatSymbolRefAttr>("callee"))
-      builder.CreateInvoke(functionMapping.lookup(attr.getValue()),
+      invokeInst = builder.CreateInvoke(functionMapping.lookup(attr.getValue()),
                            blockMapping[invOp.getSuccessor(0)],
                            blockMapping[invOp.getSuccessor(1)], operandsRef);
     else
-      builder.CreateInvoke(
+      invokeInst = builder.CreateInvoke(
           operandsRef.front(), blockMapping[invOp.getSuccessor(0)],
           blockMapping[invOp.getSuccessor(1)], operandsRef.drop_front());
+    // Apply any attributes found
+    for (auto namedAttr : invOp.getAttrs()) {
+      if (auto fnAttr = namedAttr.second.dyn_cast_or_null<UnitAttr>()) {
+        StringRef fnAttrKindName = namedAttr.first.strref();
+        auto fnAttrKind = llvm::Attribute::getAttrKindFromName(fnAttrKindName);
+        if (fnAttrKind != llvm::Attribute::None) {
+          invokeInst->addAttribute(llvm::AttributeList::FunctionIndex, fnAttrKind);
+        }
+      }
+    }
+    // Remap the result value. Note that LLVM IR InvokeOp has either 0 or 1 result.
+    if (invOp.getNumResults() != 0) {
+      valueMapping[invOp.getResult(0)] = (llvm::Value *)invokeInst;
+      return success();
+    }
+    // Check that LLVM call returns void for 0-result functions
+    if (!invokeInst->getType()->isVoidTy()) {
+      return opInst.emitError("expected callee to return void");
+    }
     return success();
   }
 

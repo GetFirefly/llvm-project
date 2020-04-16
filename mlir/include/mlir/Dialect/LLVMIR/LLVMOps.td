@@ -15,6 +15,7 @@
 
 include "mlir/Dialect/LLVMIR/LLVMOpBase.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
@@ -352,13 +353,13 @@ def LLVM_FPTruncOp : LLVM_CastOp<"fptrunc", "CreateFPTrunc">;
 def LLVM_InvokeOp : LLVM_Op<"invoke", [
                       AttrSizedOperandSegments,
                       DeclareOpInterfaceMethods<BranchOpInterface>,
+                      CallOpInterface,
                       Terminator
                     ]>,
                     Arguments<(ins OptionalAttr<FlatSymbolRefAttr>:$callee,
                                Variadic<LLVM_Type>:$operands,
                                Variadic<LLVM_Type>:$normalDestOperands,
-                               Variadic<LLVM_Type>:$unwindDestOperands)>,
-                    Results<(outs Variadic<LLVM_Type>)> {
+                               Variadic<LLVM_Type>:$unwindDestOperands)> {
   let successors = (successor AnySuccessor:$normalDest,
                               AnySuccessor:$unwindDest);
 
@@ -381,6 +382,16 @@ def LLVM_InvokeOp : LLVM_Op<"invoke", [
   let verifier = [{ return ::verify(*this);  }];
   let parser = [{ return parseInvokeOp(parser, result); }];
   let printer = [{ printInvokeOp(p, *this); }];
+
+  let extraClassDeclaration = [{
+    CallInterfaceCallable getCallableForCallee() {
+      return getAttrOfType<SymbolRefAttr>("callee");
+    }
+
+    Operation::operand_range getArgOperands() {
+        return operands();
+    }
+  }];
 }
 
 def LLVM_LandingpadOp : LLVM_OneResultOp<"landingpad">,
@@ -769,7 +780,7 @@ def LLVM_GlobalOp
 
 def LLVM_LLVMFuncOp
     : LLVM_ZeroResultOp<"func", [AutomaticAllocationScope, IsolatedFromAbove,
-                                 FunctionLike, Symbol]>,
+                                 FunctionLike, Symbol, CallableOpInterface]>,
       Arguments<(ins DefaultValuedAttr<Linkage,
                                        "Linkage::External">:$linkage,
                      OptionalAttr<FlatSymbolRefAttr>:$personality,
@@ -812,6 +823,10 @@ def LLVM_LLVMFuncOp
     // attribute is present.  This can check for preconditions of the
     // getNumArguments hook not failing.
     LogicalResult verifyType();
+
+    Region *getCallableRegion() { return isExternal() ? nullptr : &getBody(); }
+
+    ArrayRef<Type> getCallableResults() { return ArrayRef<Type>{getType().getFunctionResultType()}; }
   }];
 
   let verifier = [{ return ::verify(*this); }];

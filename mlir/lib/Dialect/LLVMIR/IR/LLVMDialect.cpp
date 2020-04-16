@@ -299,13 +299,10 @@ static ParseResult parseStoreOp(OpAsmParser &parser, OperationState &result) {
 Optional<MutableOperandRange>
 InvokeOp::getMutableSuccessorOperands(unsigned index) {
   assert(index < getNumSuccessors() && "invalid successor index");
-  return index == 0 ? normalDestOperandsMutable() : unwindDestOperandsMutable();
+  return index == 0 ? llvm::None : Optional<MutableOperandRange>(unwindDestOperandsMutable());
 }
 
 static LogicalResult verify(InvokeOp op) {
-  if (op.getNumResults() > 1)
-    return op.emitOpError("must have 0 or 1 result");
-
   Block *unwindDest = op.unwindDest();
   if (unwindDest->empty())
     return op.emitError(
@@ -340,9 +337,20 @@ static void printInvokeOp(OpAsmPrinter &p, InvokeOp op) {
   p.printOptionalAttrDict(op.getAttrs(),
                           {InvokeOp::getOperandSegmentSizeAttr(), "callee"});
   p << " : ";
+  auto normalBlock = op.normalDest();
+  Type resultType;
+  CallOpInterface coi = dyn_cast<CallOpInterface>(op.getOperation());
+  Operation *callableOp = coi.resolveCallable();
+  CallableOpInterface callable = dyn_cast<CallableOpInterface>(callableOp);
+  if (callable.getCallableResults().size() != 0) {
+    resultType = normalBlock->getArgument(0).getType();
+  } else {
+    auto t = (*op.getOperandTypes().begin()).cast<LLVMType>();
+    resultType = LLVMType::getVoidTy(t.getContext());
+  }
   p.printFunctionalType(
-      llvm::drop_begin(op.getOperandTypes(), isDirect ? 0 : 1),
-      op.getResultTypes());
+    llvm::drop_begin(op.getOperandTypes(), isDirect ? 0 : 1),
+    TypeRange(resultType));
 }
 
 /// <operation> ::= `llvm.invoke` (function-id | ssa-use) `(` ssa-use-list `)`

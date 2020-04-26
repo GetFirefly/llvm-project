@@ -1664,11 +1664,31 @@ static LogicalResult verify(FenceOp &op) {
 namespace mlir {
 namespace LLVM {
 namespace detail {
-struct LLVMDialectImpl {
-  LLVMDialectImpl() : module("LLVMDialectModule", llvmContext) {}
+struct LLVMContextHandle {
+  bool owned;
+  llvm::LLVMContext *context;
 
-  llvm::LLVMContext llvmContext;
+  LLVMContextHandle() :
+      owned(true), context(new llvm::LLVMContext()) {}
+  LLVMContextHandle(llvm::LLVMContext *ctx) :
+      owned(false), context(ctx) {}
+
+  ~LLVMContextHandle() {
+    if (owned)
+      delete context;
+  }
+};
+
+struct LLVMDialectImpl {
+  LLVMDialectImpl() 
+      : module("LLVMDialectModule", *llvmContext.context) {}
+  LLVMDialectImpl(llvm::LLVMContext *ctx)
+      : llvmContext(ctx), module("LLVMDialectModule", *ctx) {}
+
+  LLVMContextHandle llvmContext;
   llvm::Module module;
+
+  bool ownsContext;
 
   /// A set of LLVMTypes that are cached on construction to avoid any lookups or
   /// locking.
@@ -1684,6 +1704,38 @@ struct LLVMDialectImpl {
 } // end namespace LLVM
 } // end namespace mlir
 
+LLVMDialect::LLVMDialect(MLIRContext *context, llvm::LLVMContext *llvmCtx)
+    : Dialect(getDialectNamespace(), context),
+      impl(new detail::LLVMDialectImpl(llvmCtx)) {
+  addTypes<LLVMType>();
+  addOperations<
+#define GET_OP_LIST
+#include "mlir/Dialect/LLVMIR/LLVMOps.cpp.inc"
+      >();
+
+  // Support unknown operations because not all LLVM operations are registered.
+  allowUnknownOperations();
+
+  // Cache some of the common LLVM types to avoid the need for lookups/locking.
+  auto &llvmContext = impl->module.getContext();
+  /// Integer Types.
+  impl->int1Ty = LLVMType::get(context, llvm::Type::getInt1Ty(llvmContext));
+  impl->int8Ty = LLVMType::get(context, llvm::Type::getInt8Ty(llvmContext));
+  impl->int16Ty = LLVMType::get(context, llvm::Type::getInt16Ty(llvmContext));
+  impl->int32Ty = LLVMType::get(context, llvm::Type::getInt32Ty(llvmContext));
+  impl->int64Ty = LLVMType::get(context, llvm::Type::getInt64Ty(llvmContext));
+  impl->int128Ty = LLVMType::get(context, llvm::Type::getInt128Ty(llvmContext));
+  /// Float Types.
+  impl->doubleTy = LLVMType::get(context, llvm::Type::getDoubleTy(llvmContext));
+  impl->floatTy = LLVMType::get(context, llvm::Type::getFloatTy(llvmContext));
+  impl->halfTy = LLVMType::get(context, llvm::Type::getHalfTy(llvmContext));
+  impl->fp128Ty = LLVMType::get(context, llvm::Type::getFP128Ty(llvmContext));
+  impl->x86_fp80Ty =
+      LLVMType::get(context, llvm::Type::getX86_FP80Ty(llvmContext));
+  /// Other Types.
+  impl->voidTy = LLVMType::get(context, llvm::Type::getVoidTy(llvmContext));
+}
+
 LLVMDialect::LLVMDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context),
       impl(new detail::LLVMDialectImpl()) {
@@ -1697,7 +1749,7 @@ LLVMDialect::LLVMDialect(MLIRContext *context)
   allowUnknownOperations();
 
   // Cache some of the common LLVM types to avoid the need for lookups/locking.
-  auto &llvmContext = impl->llvmContext;
+  auto &llvmContext = impl->module.getContext();
   /// Integer Types.
   impl->int1Ty = LLVMType::get(context, llvm::Type::getInt1Ty(llvmContext));
   impl->int8Ty = LLVMType::get(context, llvm::Type::getInt8Ty(llvmContext));
@@ -1722,7 +1774,7 @@ LLVMDialect::~LLVMDialect() {}
 #define GET_OP_CLASSES
 #include "mlir/Dialect/LLVMIR/LLVMOps.cpp.inc"
 
-llvm::LLVMContext &LLVMDialect::getLLVMContext() { return impl->llvmContext; }
+llvm::LLVMContext &LLVMDialect::getLLVMContext() { return impl->module.getContext(); }
 llvm::Module &LLVMDialect::getLLVMModule() { return impl->module; }
 llvm::sys::SmartMutex<true> &LLVMDialect::getLLVMContextMutex() {
   return impl->mutex;

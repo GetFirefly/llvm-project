@@ -21,6 +21,7 @@ def LLVM_Dialect : Dialect {
   let cppNamespace = "LLVM";
   let hasRegionArgAttrVerify = 1;
   let extraClassDeclaration = [{
+    LLVMDialect(mlir::MLIRContext *, llvm::LLVMContext *);
     ~LLVMDialect();
     llvm::LLVMContext &getLLVMContext();
     llvm::Module &getLLVMModule();

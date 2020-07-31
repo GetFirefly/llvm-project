@@ -584,10 +584,13 @@ def LLVM_ResumeOp : LLVM_TerminatorOp<"resume", []> {
   let arguments = (ins LLVM_Type:$value);
   string llvmBuilder = [{ builder.CreateResume($value); }];
   let verifier = [{
-    if (!isa_and_nonnull<LandingpadOp>(value().getDefiningOp()))
-      return emitOpError("expects landingpad value as operand");
+    Value v = value();
     // No check for personality of function - landingpad op verifies it.
-    return success();
+    if (isa_and_nonnull<LandingpadOp>(v.getDefiningOp()))
+        return success();
+    if (v && v.isa<BlockArgument>())
+        return success();
+    return emitOpError("expects landingpad value as operand");
   }];
 
   let assemblyFormat = "$value attr-dict `:` type($value)";

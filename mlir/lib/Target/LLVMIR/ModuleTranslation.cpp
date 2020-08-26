@@ -940,6 +940,15 @@ LogicalResult ModuleTranslation::convertOneFunction(LLVMFuncOp func) {
       llvmFunc->setPersonalityFn(pfunc);
   }
 
+  // Check the gc strategy and set it
+  auto gcStrategy = func.gc();
+  if (gcStrategy.hasValue()) {
+    llvmFunc->setGC(gcStrategy.getValue().str());
+  }
+  auto gcLeafAttr = func.getAttrOfType<BoolAttr>("gc-leaf-function");
+  if (gcLeafAttr && gcLeafAttr.getValue())
+      llvmFunc->addFnAttr("gc-leaf-function", "1");
+
   // First, create all blocks so we can jump to them; (in topological order 
   // to ensure defs are converted before uses)
   auto blocks = topologicalSort(func);

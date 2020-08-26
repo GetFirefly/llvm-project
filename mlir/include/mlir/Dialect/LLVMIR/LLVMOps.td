@@ -810,6 +810,7 @@ def LLVM_LLVMFuncOp
       Arguments<(ins DefaultValuedAttr<Linkage,
                                        "Linkage::External">:$linkage,
                      OptionalAttr<FlatSymbolRefAttr>:$personality,
+                     OptionalAttr<StrAttr>:$gc,
                      OptionalAttr<ArrayAttr>:$passthrough)> {
   let summary = "LLVM dialect function, has wrapped LLVM IR function type";
 

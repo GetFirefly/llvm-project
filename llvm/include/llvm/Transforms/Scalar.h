@@ -455,7 +455,7 @@ FunctionPass *createStraightLineStrengthReducePass();
 // RewriteStatepointsForGC which can be run at an arbitrary point in the pass
 // order following this pass.
 //
-FunctionPass *createPlaceSafepointsPass();
+FunctionPass *createPlaceSafepointsLegacyPass();
 
 //===----------------------------------------------------------------------===//
 //

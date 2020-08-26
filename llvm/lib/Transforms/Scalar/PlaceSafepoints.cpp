@@ -47,12 +47,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/Transforms/Scalar/PlaceSafepoints.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/CFG.h"
+#include "llvm/Analysis/DomTreeUpdater.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
@@ -96,47 +98,89 @@ static cl::opt<int> CountedLoopTripWidth("spp-counted-loop-trip-width",
 static cl::opt<bool> SplitBackedge("spp-split-backedge", cl::Hidden,
                                    cl::init(false));
 
+
+static cl::opt<bool> NoEntry("spp-no-entry", cl::Hidden, cl::init(false));
+static cl::opt<bool> NoCall("spp-no-call", cl::Hidden, cl::init(false));
+static cl::opt<bool> NoBackedge("spp-no-backedge", cl::Hidden, cl::init(false));
+
+// TODO: These should become properties of the GCStrategy, possibly with
+// command line overrides.
+static bool enableEntrySafepoints(Function &F) { return !NoEntry; }
+static bool enableBackedgeSafepoints(Function &F) { return !NoBackedge; }
+static bool enableCallSafepoints(Function &F) { return !NoCall; }
+
 namespace {
-
-/// An analysis pass whose purpose is to identify each of the backedges in
-/// the function which require a safepoint poll to be inserted.
-struct PlaceBackedgeSafepointsImpl : public FunctionPass {
-  static char ID;
-
+struct PlaceBackedgeSafepointsAnalysis : AnalysisInfoMixin<PlaceBackedgeSafepointsAnalysis> {
   /// The output of the pass - gives a list of each backedge (described by
   /// pointing at the branch) which need a poll inserted.
-  std::vector<Instruction *> PollLocations;
+  using Result = std::vector<Instruction *>;
+
+  static AnalysisKey Key;
 
   /// True unless we're running spp-no-calls in which case we need to disable
   /// the call-dependent placement opts.
   bool CallSafepointsEnabled;
 
-  ScalarEvolution *SE = nullptr;
-  DominatorTree *DT = nullptr;
-  LoopInfo *LI = nullptr;
-  TargetLibraryInfo *TLI = nullptr;
+  Result run(Function &F, FunctionAnalysisManager &FAM) {
+    if (!enableBackedgeSafepoints(F))
+      return std::vector<Instruction *>();
 
-  PlaceBackedgeSafepointsImpl(bool CallSafepoints = false)
-      : FunctionPass(ID), CallSafepointsEnabled(CallSafepoints) {
-    initializePlaceBackedgeSafepointsImplPass(*PassRegistry::getPassRegistry());
+    auto &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
+    auto &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+    auto &LI = FAM.getResult<LoopAnalysis>(F);
+    auto &TLI = FAM.getResult<TargetLibraryAnalysis>(F);
+
+    CallSafepointsEnabled = enableCallSafepoints(F);
+
+    // We no longer modify the IR at all in this pass.  Thus all
+    // analysis are preserved.
+    return runOnFunction(F, SE, DT, LI, TLI);
   }
 
-  bool runOnLoop(Loop *);
-  void runOnLoopAndSubLoops(Loop *L) {
-    // Visit all the subloops
-    for (Loop *I : *L)
-      runOnLoopAndSubLoops(I);
-    runOnLoop(L);
+
+  bool runOnLoop(Loop *, Result &, ScalarEvolution &, DominatorTree &, const TargetLibraryInfo &);
+
+  Result runOnFunction(Function &F, ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, const TargetLibraryInfo &TLI) {
+    std::vector<Instruction *> PollLocations;
+
+    for (Loop *L : LI) {
+      for (Loop *IL : *L)
+        runOnLoop(IL, PollLocations, SE, DT, TLI);
+      runOnLoop(L, PollLocations, SE, DT, TLI);
+    }
+
+    return PollLocations;
+  }
+};
+
+AnalysisKey PlaceBackedgeSafepointsAnalysis::Key;
+
+/// An analysis pass whose purpose is to identify each of the backedges in
+/// the function which require a safepoint poll to be inserted.
+class PlaceBackedgeSafepointsWrapperPass : public FunctionPass {
+public:
+  using Result = PlaceBackedgeSafepointsAnalysis::Result;
+
+private:
+  Result PollLocations;
+  PlaceBackedgeSafepointsAnalysis Impl;
+
+public:
+  static char ID;
+
+  PlaceBackedgeSafepointsWrapperPass()
+      : FunctionPass(ID) {
+    initializePlaceBackedgeSafepointsWrapperPassPass(*PassRegistry::getPassRegistry());
   }
 
   bool runOnFunction(Function &F) override {
-    SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
-    DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-    LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
-    TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
-    for (Loop *I : *LI) {
-      runOnLoopAndSubLoops(I);
-    }
+    auto &SE = getAnalysis<ScalarEvolutionWrapperPass>().getSE();
+    auto &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+    auto &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
+    auto &TLI = getAnalysis<TargetLibraryInfoWrapperPass>(F).getTLI(F);
+
+    PollLocations = Impl.runOnFunction(F, SE, DT, LI, TLI);
+
     return false;
   }
 
@@ -149,29 +193,113 @@ struct PlaceBackedgeSafepointsImpl : public FunctionPass {
     // analysis are preserved.
     AU.setPreservesAll();
   }
+
+  Result &getPollLocations() { return PollLocations; }
 };
 }
 
-static cl::opt<bool> NoEntry("spp-no-entry", cl::Hidden, cl::init(false));
-static cl::opt<bool> NoCall("spp-no-call", cl::Hidden, cl::init(false));
-static cl::opt<bool> NoBackedge("spp-no-backedge", cl::Hidden, cl::init(false));
+
+const char GCSafepointPollName[] = "gc.safepoint_poll";
+
+static bool isGCSafepointPoll(Function &F) {
+  return F.getName().equals(GCSafepointPollName);
+}
+
+/// Returns true if this function should be rewritten to include safepoint
+/// polls and parseable call sites.  The main point of this function is to be
+/// an extension point for custom logic.
+static bool shouldRewriteFunction(Function &F) {
+  // TODO: This should check the GCStrategy
+  if (F.hasGC()) {
+    const auto &FunctionGCName = F.getGC();
+    const StringRef StatepointExampleName("statepoint-example");
+    const StringRef CoreCLRName("coreclr");
+    return (StatepointExampleName == FunctionGCName) ||
+           (CoreCLRName == FunctionGCName);
+  } else
+    return false;
+}
 
 namespace {
-struct PlaceSafepoints : public FunctionPass {
+class PlaceSafepointsLegacyPass : public FunctionPass {
+  PlaceSafepoints Impl;
+
+public:
   static char ID; // Pass identification, replacement for typeid
 
-  PlaceSafepoints() : FunctionPass(ID) {
-    initializePlaceSafepointsPass(*PassRegistry::getPassRegistry());
+  PlaceSafepointsLegacyPass() : FunctionPass(ID), Impl() {
+    initializePlaceSafepointsLegacyPassPass(*PassRegistry::getPassRegistry());
   }
-  bool runOnFunction(Function &F) override;
+
+  bool runOnFunction(Function &F) override {
+    if (F.isDeclaration() || F.empty()) {
+      // This is a declaration, nothing to do.  Must exit early to avoid crash in
+      // dom tree calculation
+      return false;
+    }
+
+    if (isGCSafepointPoll(F)) {
+      // Given we're inlining this inside of safepoint poll insertion, this
+      // doesn't make any sense.  Note that we do make any contained calls
+      // parseable after we inline a poll.
+      return false;
+    }
+
+    if (!shouldRewriteFunction(F))
+      return false;
+
+    bool Changed = false;
+
+    const TargetLibraryInfo &TLI =
+          getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
+    auto &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+    auto &PL = getAnalysis<PlaceBackedgeSafepointsWrapperPass>(F).getPollLocations();
+
+    Changed |= Impl.runOnFunction(F, DT, TLI, PL);
+
+    return Changed;
+  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     // We modify the graph wholesale (inlining, block insertion, etc).  We
     // preserve nothing at the moment.  We could potentially preserve dom tree
     // if that was worth doing
     AU.addRequired<TargetLibraryInfoWrapperPass>();
+    AU.addRequired<DominatorTreeWrapperPass>();
+    AU.addRequired<PlaceBackedgeSafepointsWrapperPass>();
   }
 };
+}
+
+PreservedAnalyses PlaceSafepoints::run(Function &F, FunctionAnalysisManager &FAM) {
+    if (F.isDeclaration() || F.empty()) {
+      // This is a declaration, nothing to do.  Must exit early to avoid crash in
+      // dom tree calculation
+      return PreservedAnalyses::all();
+    }
+
+    if (isGCSafepointPoll(F)) {
+      // Given we're inlining this inside of safepoint poll insertion, this
+      // doesn't make any sense.  Note that we do make any contained calls
+      // parseable after we inline a poll.
+      return PreservedAnalyses::all();
+    }
+
+    if (!shouldRewriteFunction(F))
+      return PreservedAnalyses::all();
+
+    bool Changed = false;
+    // We modify the graph wholesale (inlining, block insertion, etc).  We
+    // preserve nothing at the moment.  We could potentially preserve dom tree
+    // if that was worth doing
+    auto &TLI = FAM.getResult<TargetLibraryAnalysis>(F);
+    auto &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+    auto &PL = FAM.getResult<PlaceBackedgeSafepointsAnalysis>(F);
+    Changed |= runOnFunction(F, DT, TLI, PL);
+    if (!Changed)
+      return PreservedAnalyses::all();
+
+    return PreservedAnalyses::none();
 }
 
 // Insert a safepoint poll immediately before the given instruction.  Does
@@ -306,7 +434,12 @@ static void scanInlinedCode(Instruction *Start, Instruction *End,
   }
 }
 
-bool PlaceBackedgeSafepointsImpl::runOnLoop(Loop *L) {
+bool PlaceBackedgeSafepointsAnalysis::runOnLoop(
+        Loop *L, 
+        std::vector<Instruction *> &PollLocations,
+        ScalarEvolution &SE, 
+        DominatorTree &DT, 
+        const TargetLibraryInfo &TLI)  {
   // Loop through all loop latches (branches controlling backedges).  We need
   // to place a safepoint on every backedge (potentially).
   // Note: In common usage, there will be only one edge due to LoopSimplify
@@ -322,13 +455,13 @@ bool PlaceBackedgeSafepointsImpl::runOnLoop(Loop *L) {
     // not.  Note that this is about unburdening the optimizer in loops, not
     // avoiding the runtime cost of the actual safepoint.
     if (!AllBackedges) {
-      if (mustBeFiniteCountedLoop(L, SE, Pred)) {
+      if (mustBeFiniteCountedLoop(L, &SE, Pred)) {
         LLVM_DEBUG(dbgs() << "skipping safepoint placement in finite loop\n");
         FiniteExecution++;
         continue;
       }
       if (CallSafepointsEnabled &&
-          containsUnconditionalCallSafepoint(L, Header, Pred, *DT, *TLI)) {
+          containsUnconditionalCallSafepoint(L, Header, Pred, DT, TLI)) {
         // Note: This is only semantically legal since we won't do any further
         // IPO or inlining before the actual call insertion..  If we hadn't, we
         // might latter loose this call safepoint.
@@ -436,88 +569,25 @@ static Instruction *findLocationForEntrySafepoint(Function &F,
   return Cursor;
 }
 
-const char GCSafepointPollName[] = "gc.safepoint_poll";
-
-static bool isGCSafepointPoll(Function &F) {
-  return F.getName().equals(GCSafepointPollName);
-}
-
-/// Returns true if this function should be rewritten to include safepoint
-/// polls and parseable call sites.  The main point of this function is to be
-/// an extension point for custom logic.
-static bool shouldRewriteFunction(Function &F) {
-  // TODO: This should check the GCStrategy
-  if (F.hasGC()) {
-    const auto &FunctionGCName = F.getGC();
-    const StringRef StatepointExampleName("statepoint-example");
-    const StringRef CoreCLRName("coreclr");
-    return (StatepointExampleName == FunctionGCName) ||
-           (CoreCLRName == FunctionGCName);
-  } else
-    return false;
-}
-
-// TODO: These should become properties of the GCStrategy, possibly with
-// command line overrides.
-static bool enableEntrySafepoints(Function &F) { return !NoEntry; }
-static bool enableBackedgeSafepoints(Function &F) { return !NoBackedge; }
-static bool enableCallSafepoints(Function &F) { return !NoCall; }
-
-bool PlaceSafepoints::runOnFunction(Function &F) {
-  if (F.isDeclaration() || F.empty()) {
-    // This is a declaration, nothing to do.  Must exit early to avoid crash in
-    // dom tree calculation
-    return false;
-  }
-
-  if (isGCSafepointPoll(F)) {
-    // Given we're inlining this inside of safepoint poll insertion, this
-    // doesn't make any sense.  Note that we do make any contained calls
-    // parseable after we inline a poll.
-    return false;
-  }
-
-  if (!shouldRewriteFunction(F))
-    return false;
-
-  const TargetLibraryInfo &TLI =
-      getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
-
+bool PlaceSafepoints::runOnFunction(Function &F, DominatorTree &DT, const TargetLibraryInfo &TLI, std::vector<Instruction *> &PollLocations) {
   bool Modified = false;
 
   // In various bits below, we rely on the fact that uses are reachable from
   // defs.  When there are basic blocks unreachable from the entry, dominance
   // and reachablity queries return non-sensical results.  Thus, we preprocess
   // the function to ensure these properties hold.
-  Modified |= removeUnreachableBlocks(F);
+  DomTreeUpdater DTU(DT, DomTreeUpdater::UpdateStrategy::Lazy);
+  Modified |= removeUnreachableBlocks(F, &DTU);
+  // Flush the Dominator Tree.
+  DTU.getDomTree();
 
   // STEP 1 - Insert the safepoint polling locations.  We do not need to
   // actually insert parse points yet.  That will be done for all polls and
   // calls in a single pass.
-
-  DominatorTree DT;
-  DT.recalculate(F);
-
   SmallVector<Instruction *, 16> PollsNeeded;
   std::vector<CallBase *> ParsePointNeeded;
 
   if (enableBackedgeSafepoints(F)) {
-    // Construct a pass manager to run the LoopPass backedge logic.  We
-    // need the pass manager to handle scheduling all the loop passes
-    // appropriately.  Doing this by hand is painful and just not worth messing
-    // with for the moment.
-    legacy::FunctionPassManager FPM(F.getParent());
-    bool CanAssumeCallSafepoints = enableCallSafepoints(F);
-    auto *PBS = new PlaceBackedgeSafepointsImpl(CanAssumeCallSafepoints);
-    FPM.add(PBS);
-    FPM.run(F);
-
-    // We preserve dominance information when inserting the poll, otherwise
-    // we'd have to recalculate this on every insert
-    DT.recalculate(F);
-
-    auto &PollLocations = PBS->PollLocations;
-
     auto OrderByBBName = [](Instruction *a, Instruction *b) {
       return a->getParent()->getName() < b->getParent()->getName();
     };
@@ -596,26 +666,26 @@ bool PlaceSafepoints::runOnFunction(Function &F) {
   return Modified;
 }
 
-char PlaceBackedgeSafepointsImpl::ID = 0;
-char PlaceSafepoints::ID = 0;
+char PlaceBackedgeSafepointsWrapperPass::ID = 0;
+char PlaceSafepointsLegacyPass::ID = 0;
 
-FunctionPass *llvm::createPlaceSafepointsPass() {
-  return new PlaceSafepoints();
+FunctionPass *llvm::createPlaceSafepointsLegacyPass() {
+  return new PlaceSafepointsLegacyPass();
 }
 
-INITIALIZE_PASS_BEGIN(PlaceBackedgeSafepointsImpl,
+INITIALIZE_PASS_BEGIN(PlaceBackedgeSafepointsWrapperPass,
                       "place-backedge-safepoints-impl",
                       "Place Backedge Safepoints", false, false)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
-INITIALIZE_PASS_END(PlaceBackedgeSafepointsImpl,
+INITIALIZE_PASS_END(PlaceBackedgeSafepointsWrapperPass,
                     "place-backedge-safepoints-impl",
                     "Place Backedge Safepoints", false, false)
 
-INITIALIZE_PASS_BEGIN(PlaceSafepoints, "place-safepoints", "Place Safepoints",
+INITIALIZE_PASS_BEGIN(PlaceSafepointsLegacyPass, "place-safepoints", "Place Safepoints",
                       false, false)
-INITIALIZE_PASS_END(PlaceSafepoints, "place-safepoints", "Place Safepoints",
+INITIALIZE_PASS_END(PlaceSafepointsLegacyPass, "place-safepoints", "Place Safepoints",
                     false, false)
 
 static void

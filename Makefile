@@ -75,6 +75,8 @@ dist-macos: ## Build an LLVM release distribution for x86_64-apple-darwin
 		--flavor="Release" \
 		--targets="X86;AArch64;ARM;WebAssembly" \
 		--with-assertions \
+		--with-dylib \
+		--link-dylib \
 		--build-dir=$(CWD)/build/release \
 		--install-dir=$(CWD)/build/x86_64-apple-darwin \
 		--dist-dir=$(CWD)/build/packages/dist \

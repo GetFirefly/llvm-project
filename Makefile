@@ -88,7 +88,7 @@ dist-linux: ## Build an LLVM release distribution for x86_64-unknown-linux
 	docker build \
 		-t llvm-project:dist-$(RELEASE)-$(SHA) \
 		--target=dist \
-		--build-arg buildscript_args="-release=$(RELEASE) -clean-obj" . && \
+		--build-arg buildscript_args="-release=$(RELEASE) -flavor=RelWithDebInfo -clean-obj" . && \
 		utils/dist/extract-release.sh -release $(RELEASE) -sha $(SHA)
 
 docker: ## Build a Docker image containing an LLVM distribution
@@ -96,4 +96,4 @@ docker: ## Build a Docker image containing an LLVM distribution
 	docker build \
 		-t lumen/llvm:latest \
 		--target=release \
-		--build-arg buildscript_args="" .
+		--build-arg buildscript_args="-release=$(RELEASE) -flavor=RelWithDebInfo -clean-obj" .

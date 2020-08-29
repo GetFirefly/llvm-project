@@ -67,18 +67,17 @@ RUN mkdir -p /tmp/build && \
     mkdir -p /tmp/dist && \
     /tmp/scripts/build-dist.sh \
         -stage=1 \
-        -flavor=Release \
         -build-dir=/tmp/build \
         -src-dir=/tmp/sources \
         -install-dir=/tmp/install \
         -dist-dir=/tmp/dist \
-        ${buildscript_args}
+        ${buildscript_args} \
+        -flavor=Release
 
 # Run the stage2 build. This builds the release compiler and tools.
 # Results of the build will be available at /tmp/install/.
 RUN /tmp/scripts/build-dist.sh \
         -stage=2 \
-        -flavor=Release \
         -with-assertions \
         -with-static-libc++ \
         -build-dir=/tmp/build \

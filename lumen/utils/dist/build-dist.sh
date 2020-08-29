@@ -590,8 +590,9 @@ echo "    $(uname -a)"
 echo "*************************************"
 echo ""
 
-stage1_objdir="$build_dir/stage1/$flavor/stage1-$release.obj"
-stage1_destdir="$build_dir/stage1/$flavor/stage1-$release.install"
+# Stage 1 is always run as -flavor=Release
+stage1_objdir="$build_dir/stage1/Release/stage1-$release.obj"
+stage1_destdir="$build_dir/stage1/Release/stage1-$release.install"
 
 if [ -z "$build_staged" ]; then
     echo "Not performing a staged build, skipping to stage 2 build"

@@ -26,6 +26,8 @@ RUN apt-get update && \
         libxml2-dev \
         libncurses5-dev \
         python2.7-dev \
+        python3 \
+        python3-dev \
         file \
         python \
         wget \

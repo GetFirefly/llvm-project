@@ -734,6 +734,14 @@ static LogicalResult checkedAddLLVMFnAttribute(Location loc,
                                                llvm::Function *llvmFunc,
                                                StringRef key,
                                                StringRef value = StringRef()) {
+  // Special handling required for the gc strategy attribute
+  if (key == "gc") {
+    if (value.empty())
+      return emitError(loc) << "LLVM attribute 'gc' expects a strategy name as value";
+    llvmFunc->setGC(value.str());
+    return success();
+  }
+
   auto kind = llvm::Attribute::getAttrKindFromName(key);
   if (kind == llvm::Attribute::None) {
     llvmFunc->addFnAttr(key, value);

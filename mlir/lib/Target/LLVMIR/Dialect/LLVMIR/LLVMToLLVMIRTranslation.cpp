@@ -277,15 +277,32 @@ convertOperationImpl(Operation &opInst, llvm::IRBuilderBase &builder,
   auto convertCall = [&](Operation &op) -> llvm::Value * {
     auto operands = moduleTranslation.lookupValues(op.getOperands());
     ArrayRef<llvm::Value *> operandsRef(operands);
-    if (auto attr = op.getAttrOfType<FlatSymbolRefAttr>("callee"))
-      return builder.CreateCall(
+    llvm::Value *callV;
+    if (auto attr = op.getAttrOfType<FlatSymbolRefAttr>("callee")) {
+      callV = builder.CreateCall(
           moduleTranslation.lookupFunction(attr.getValue()), operandsRef);
-    auto calleeType =
-        op.getOperands().front().getType().cast<LLVMPointerType>();
-    auto *calleeFunctionType = cast<llvm::FunctionType>(
-        moduleTranslation.convertType(calleeType.getElementType()));
-    return builder.CreateCall(calleeFunctionType, operandsRef.front(),
-                              operandsRef.drop_front());
+    } else {
+      auto calleeType = op.getOperands().front().getType().cast<LLVMPointerType>();
+      auto *calleeFunctionType =
+          cast<llvm::FunctionType>(moduleTranslation.convertType(calleeType.getElementType()));
+      callV = builder.CreateCall(calleeFunctionType, operandsRef.front(),
+                                 operandsRef.drop_front());
+    }
+    auto callInst = static_cast<llvm::CallInst *>(callV);
+    if (op.getAttrOfType<UnitAttr>("tail")) {
+      callInst->setTailCall(true);
+    } else if (op.getAttrOfType<UnitAttr>("musttail")) {
+      callInst->setTailCallKind(llvm::CallInst::TailCallKind::TCK_MustTail);
+    }
+    for (auto namedAttr : op.getAttrs()) {
+      if (auto fnAttr = namedAttr.getValue().dyn_cast_or_null<UnitAttr>()) {
+        StringRef fnAttrKindName = namedAttr.getName();
+        auto fnAttrKind = llvm::Attribute::getAttrKindFromName(fnAttrKindName);
+        if (fnAttrKind != llvm::Attribute::None)
+          callInst->addAttributeAtIndex(llvm::AttributeList::FunctionIndex, fnAttrKind);
+      }
+    }
+    return callInst;
   };
 
   // Emit calls.  If the called function has a result, remap the corresponding

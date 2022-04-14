@@ -61,7 +61,10 @@ StringRef Constraint::getDefName() const {
   // Functor used to check a base def in the case where the current def is
   // anonymous.
   auto checkBaseDefFn = [&](StringRef baseName) {
-    if (const auto *init = dyn_cast<llvm::DefInit>(def->getValueInit(baseName)))
+    const llvm::RecordVal *rv = def->getValue(baseName);
+    if (!rv || !rv->getValue())
+      return def->getName();
+    if (const auto *init = dyn_cast<llvm::DefInit>(rv->getValue()))
       return Constraint(init->getDef(), kind).getDefName();
     return def->getName();
   };

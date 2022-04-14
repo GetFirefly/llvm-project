@@ -37,6 +37,7 @@
 using namespace mlir;
 using namespace mlir::LLVM;
 using mlir::LLVM::linkage::getMaxEnumValForLinkage;
+using mlir::LLVM::thread_local_mode::getMaxEnumValForThreadLocalMode;
 
 #include "mlir/Dialect/LLVMIR/LLVMOpsDialect.cpp.inc"
 
@@ -1579,12 +1580,23 @@ LogicalResult AddressOfOp::verify() {
 // Builder, printer and verifier for LLVM::GlobalOp.
 //===----------------------------------------------------------------------===//
 
+/// Returns the name used for the linkage attribute. This *must* correspond to
+/// the name of the attribute in ODS.
+static StringRef getLinkageAttrName() { return "linkage"; }
+
+/// Returns the name used for the thread-local mode attribute. This *must* correspond to
+/// the name of the attribute in ODS.
+static StringRef getThreadLocalModeAttrName() { return "tls_mode"; }
+
+/// Returns the name used for the unnamed_addr attribute. This *must* correspond
+/// to the name of the attribute in ODS.
+static StringRef getUnnamedAddrAttrName() { return "unnamed_addr"; }
+
 void GlobalOp::build(OpBuilder &builder, OperationState &result, Type type,
-                     bool isConstant, Linkage linkage, StringRef name,
-                     Attribute value, uint64_t alignment, unsigned addrSpace,
-                     bool dsoLocal, bool threadLocal,
-                     ArrayRef<NamedAttribute> attrs) {
-  result.addAttribute(getSymNameAttrName(result.name),
+                     bool isConstant, Linkage linkage, ThreadLocalMode tlsMode,
+                     StringRef name, Attribute value, uint64_t alignment, 
+                     unsigned addrSpace, bool dsoLocal, ArrayRef<NamedAttribute> attrs) {
+  result.addAttribute(SymbolTable::getSymbolAttrName(),
                       builder.getStringAttr(name));
   result.addAttribute(getGlobalTypeAttrName(result.name), TypeAttr::get(type));
   if (isConstant)
@@ -1594,9 +1606,6 @@ void GlobalOp::build(OpBuilder &builder, OperationState &result, Type type,
     result.addAttribute(getValueAttrName(result.name), value);
   if (dsoLocal)
     result.addAttribute(getDsoLocalAttrName(result.name),
-                        builder.getUnitAttr());
-  if (threadLocal)
-    result.addAttribute(getThreadLocal_AttrName(result.name),
                         builder.getUnitAttr());
 
   // Only add an alignment attribute if the "alignment" input
@@ -1608,6 +1617,8 @@ void GlobalOp::build(OpBuilder &builder, OperationState &result, Type type,
 
   result.addAttribute(getLinkageAttrName(result.name),
                       LinkageAttr::get(builder.getContext(), linkage));
+  result.addAttribute(::getThreadLocalModeAttrName(),
+                      ThreadLocalModeAttr::get(builder.getContext(), tlsMode));
   if (addrSpace != 0)
     result.addAttribute(getAddrSpaceAttrName(result.name),
                         builder.getI32IntegerAttr(addrSpace));
@@ -1617,6 +1628,9 @@ void GlobalOp::build(OpBuilder &builder, OperationState &result, Type type,
 
 void GlobalOp::print(OpAsmPrinter &p) {
   p << ' ' << stringifyLinkage(getLinkage()) << ' ';
+  auto tlsMode = getThreadLocalMode();
+  if (tlsMode != ThreadLocalMode::NotThreadLocal)
+    p << stringifyThreadLocalMode(tlsMode) << ' ';
   if (auto unnamedAddr = getUnnamedAddr()) {
     StringRef str = stringifyUnnamedAddr(*unnamedAddr);
     if (!str.empty())
@@ -1634,11 +1648,11 @@ void GlobalOp::print(OpAsmPrinter &p) {
   // Note that the alignment attribute is printed using the
   // default syntax here, even though it is an inherent attribute
   // (as defined in https://mlir.llvm.org/docs/LangRef/#attributes)
-  p.printOptionalAttrDict(
-      (*this)->getAttrs(),
-      {SymbolTable::getSymbolAttrName(), getGlobalTypeAttrName(),
-       getConstantAttrName(), getValueAttrName(), getLinkageAttrName(),
-       getUnnamedAddrAttrName(), getThreadLocal_AttrName()});
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          {SymbolTable::getSymbolAttrName(), "global_type",
+                           "constant", "value", getLinkageAttrName(),
+                           getThreadLocalModeAttrName(),
+                           getUnnamedAddrAttrName()});
 
   // Print the trailing type unless it's a string global.
   if (getValueOrNull().dyn_cast_or_null<StringAttr>())
@@ -1676,6 +1690,7 @@ struct EnumTraits {};
   }
 
 REGISTER_ENUM_TYPE(Linkage);
+REGISTER_ENUM_TYPE(ThreadLocalMode);
 REGISTER_ENUM_TYPE(UnnamedAddr);
 } // namespace
 
@@ -1709,10 +1724,15 @@ ParseResult GlobalOp::parse(OpAsmParser &parser, OperationState &result) {
                       LLVM::LinkageAttr::get(
                           ctx, parseOptionalLLVMKeyword<Linkage>(
                                    parser, result, LLVM::Linkage::External)));
-
   if (succeeded(parser.parseOptionalKeyword("thread_local")))
-    result.addAttribute(getThreadLocal_AttrName(result.name),
-                        parser.getBuilder().getUnitAttr());
+    result.addAttribute(::getThreadLocalModeAttrName(),
+                        LLVM::ThreadLocalModeAttr::get(ctx, LLVM::ThreadLocalMode::GeneralDynamic));
+
+  // Parse optional thread-local mode, default to NotThreadLocal
+  result.addAttribute(::getThreadLocalModeAttrName(),
+                      LLVM::ThreadLocalModeAttr::get(
+                          ctx, parseOptionalLLVMKeyword<ThreadLocalMode>(
+                                   parser, result, LLVM::ThreadLocalMode::NotThreadLocal)));
 
   // Parse optional UnnamedAddr, default to None.
   result.addAttribute(getUnnamedAddrAttrName(result.name),
@@ -2501,7 +2521,7 @@ OpFoldResult LLVM::GEPOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 void LLVMDialect::initialize() {
-  addAttributes<FMFAttr, LinkageAttr, LoopOptionsAttr>();
+  addAttributes<FMFAttr, LinkageAttr, ThreadLocalModeAttr, LoopOptionsAttr>();
 
   // clang-format off
   addTypes<LLVMVoidType,
@@ -2809,6 +2829,29 @@ Attribute LinkageAttr::parse(AsmParser &parser, Type type) {
   }
   Linkage linkage = *elem;
   return LinkageAttr::get(parser.getContext(), linkage);
+}
+
+void ThreadLocalModeAttr::print(AsmPrinter &printer) const {
+  printer << "<";
+  if (static_cast<uint64_t>(getThreadLocalMode()) <= getMaxEnumValForThreadLocalMode())
+    printer << stringifyEnum(getThreadLocalMode());
+  else
+    printer << static_cast<uint64_t>(getThreadLocalMode());
+  printer << ">";
+}
+
+Attribute ThreadLocalModeAttr::parse(AsmParser &parser, Type type) {
+  StringRef elemName;
+  if (parser.parseLess() || parser.parseKeyword(&elemName) ||
+      parser.parseGreater())
+    return {};
+  auto elem = thread_local_mode::symbolizeThreadLocalMode(elemName);
+  if (!elem) {
+    parser.emitError(parser.getNameLoc(), "Unknown thread-local mode: ") << elemName;
+    return {};
+  }
+  ThreadLocalMode tlsMode = *elem;
+  return ThreadLocalModeAttr::get(parser.getContext(), tlsMode);
 }
 
 LoopOptionsAttrBuilder::LoopOptionsAttrBuilder(LoopOptionsAttr attr)

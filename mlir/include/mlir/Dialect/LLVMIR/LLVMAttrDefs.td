@@ -35,6 +35,15 @@ def LinkageAttr : LLVM_Attr<"Linkage"> {
   let hasCustomAssemblyFormat = 1;
 }
 
+// Attribute definition for the LLVM ThreadLocalMode enum.
+def ThreadLocalModeAttr : LLVM_Attr<"ThreadLocalMode"> {
+  let mnemonic = "tls_mode";
+  let parameters = (ins
+    "thread_local_mode::ThreadLocalMode":$threadLocalMode
+  );
+  let hasCustomAssemblyFormat = 1;
+}
+
 def LoopOptionsAttr : LLVM_Attr<"LoopOptions"> {
   let mnemonic = "loopopts";
 

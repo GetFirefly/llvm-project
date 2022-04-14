@@ -30,6 +30,8 @@
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Frontend/OpenMP/OMPIRBuilder.h"
+#include "llvm/IR/Attributes.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Constants.h"
@@ -648,6 +650,7 @@ LogicalResult ModuleTranslation::convertGlobals() {
     }
 
     auto linkage = convertLinkageToLLVM(op.getLinkage());
+    auto tlsMode = convertThreadLocalModeToLLVM(op.getThreadLocalMode());
     auto addrSpace = op.getAddrSpace();
 
     // LLVM IR requires constant with linkage other than external or weak
@@ -661,10 +664,7 @@ LogicalResult ModuleTranslation::convertGlobals() {
 
     auto *var = new llvm::GlobalVariable(
         *llvmModule, type, op.getConstant(), linkage, cst, op.getSymName(),
-        /*InsertBefore=*/nullptr,
-        op.getThreadLocal_() ? llvm::GlobalValue::GeneralDynamicTLSModel
-                             : llvm::GlobalValue::NotThreadLocal,
-        addrSpace);
+        /*InsertBefore=*/nullptr, tlsMode, addrSpace);
 
     if (op.getUnnamedAddr().hasValue())
       var->setUnnamedAddr(convertUnnamedAddrToLLVM(*op.getUnnamedAddr()));

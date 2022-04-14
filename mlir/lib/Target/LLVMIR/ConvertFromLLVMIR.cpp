@@ -432,11 +432,11 @@ GlobalOp Importer::processGlobal(llvm::GlobalVariable *gv) {
     alignment = align.value();
   }
 
-  GlobalOp op = b.create<GlobalOp>(
-      UnknownLoc::get(context), type, gv->isConstant(),
-      convertLinkageFromLLVM(gv->getLinkage()), gv->getName(), valueAttr,
-      alignment, /*addr_space=*/gv->getAddressSpace(),
-      /*dso_local=*/gv->isDSOLocal(), /*thread_local=*/gv->isThreadLocal());
+  GlobalOp op =
+      b.create<GlobalOp>(UnknownLoc::get(context), type, gv->isConstant(),
+                         convertLinkageFromLLVM(gv->getLinkage()),
+                         convertThreadLocalModeFromLLVM(gv->getThreadLocalMode()),
+                         gv->getName(), valueAttr, alignment, gv->isDSOLocal());
 
   if (gv->hasInitializer() && !valueAttr) {
     Region &r = op.getInitializerRegion();

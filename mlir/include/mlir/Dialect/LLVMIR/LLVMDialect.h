@@ -40,6 +40,7 @@ namespace LLVM {
 // TODO: this shouldn't be needed after we unify the attribute generation, i.e.
 // --gen-attr-* and --gen-attrdef-*.
 using linkage::Linkage;
+using thread_local_mode::ThreadLocalMode;
 } // namespace LLVM
 } // namespace mlir
 

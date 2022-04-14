@@ -814,6 +814,37 @@ def Linkage : DialectAttr<
           "::mlir::LLVM::LinkageAttr::get($_builder.getContext(), $0)";
 }
 
+def ThreadLocalModeNotThreadLocal
+    : LLVM_EnumAttrCase<"NotThreadLocal", "not_thread_local", "NotThreadLocal", 0>;
+def ThreadLocalModeGeneralDynamic
+    : LLVM_EnumAttrCase<"GeneralDynamic", "general_dynamic", "GeneralDynamicTLSModel", 1>;
+def ThreadLocalModeLocalDynamic
+    : LLVM_EnumAttrCase<"LocalDynamic", "local_dynamic", "LocalDynamicTLSModel", 2>;
+def ThreadLocalModeInitialExec
+    : LLVM_EnumAttrCase<"InitialExec", "initial_exec", "InitialExecTLSModel", 3>;
+def ThreadLocalModeLocalExec
+    : LLVM_EnumAttrCase<"LocalExec", "local_exec", "LocalExecTLSModel", 4>;
+
+def ThreadLocalModeEnum : LLVM_EnumAttr<
+    "ThreadLocalMode",
+    "::llvm::GlobalValue::ThreadLocalMode",
+    "LLVM thread-local modes",
+    [ThreadLocalModeNotThreadLocal, 
+     ThreadLocalModeGeneralDynamic, ThreadLocalModeLocalDynamic,
+     ThreadLocalModeInitialExec, ThreadLocalModeLocalExec]> {
+  let cppNamespace = "::mlir::LLVM::thread_local_mode";
+}
+
+def ThreadLocalMode : DialectAttr<
+    LLVM_Dialect,
+    CPred<"$_self.isa<::mlir::LLVM::ThreadLocalModeAttr>()">,
+    "LLVM thread-local mode specification"> {
+  let storageType = "::mlir::LLVM::ThreadLocalModeAttr";
+  let returnType = "::mlir::LLVM::ThreadLocalMode";
+  let convertFromStorage = "$_self.getThreadLocalMode()";
+  let constBuilderCall =
+          "::mlir::LLVM::ThreadLocalModeAttr::get($_builder.getContext(), $0)";
+}
 
 def UnnamedAddrNone : LLVM_EnumAttrCase<"None", "", "None", 0>;
 def UnnamedAddrLocal : LLVM_EnumAttrCase<"Local", "local_unnamed_addr", "Local", 1>;
@@ -1000,6 +1031,7 @@ def LLVM_GlobalOp : LLVM_Op<"mlir.global",
     UnitAttr:$constant,
     StrAttr:$sym_name,
     Linkage:$linkage,
+    ThreadLocalMode:$threadLocalMode,
     UnitAttr:$dso_local,
     UnitAttr:$thread_local_,
     OptionalAttr<AnyAttr>:$value,
@@ -1109,12 +1141,21 @@ def LLVM_GlobalOp : LLVM_Op<"mlir.global",
 
   let builders = [
     OpBuilder<(ins "Type":$type, "bool":$isConstant, "Linkage":$linkage,
+      "ThreadLocalMode":$threadLocalMode, "StringRef":$name, "Attribute":$value,
+      CArg<"uint64_t", "0">:$alignment,
+      CArg<"unsigned", "0">:$addrSpace,
+      CArg<"bool", "false">:$dsoLocal,
+      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs)>,
+    OpBuilder<(ins "Type":$type, "bool":$isConstant, "Linkage":$linkage,
       "StringRef":$name, "Attribute":$value,
       CArg<"uint64_t", "0">:$alignment,
       CArg<"unsigned", "0">:$addrSpace,
       CArg<"bool", "false">:$dsoLocal,
-      CArg<"bool", "false">:$thread_local_,
-      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs)>
+      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs), [{
+        build($_builder, $_state, type, isConstant, linkage,
+              ThreadLocalMode::NotThreadLocal, name, value, alignment, 
+              addrSpace, dsoLocal, attrs);
+    }]>
   ];
 
   let extraClassDeclaration = [{

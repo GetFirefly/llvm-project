@@ -556,6 +556,7 @@ function install_release() {
     local cwd=""
     cwd="$(pwd)"
     cd "$build_dir/stage2/$flavor"
+    rm -rf "$install_dir"
     mkdir -p "$install_dir"
     cp -R "stage2-$release.install"/usr/local/* "$install_dir"/
     cd "$cwd"
@@ -666,6 +667,10 @@ else
                 rm -rf "$stage2_destdir"
                 mkdir -p "$stage2_objdir"
                 mkdir -p "$stage2_destdir"
+                if [ -z "${install_dir}" ]; then
+                    echo "Missing install_dir!"
+                    exit 2
+                fi
                 rm -rf "${install_dir:?}"/*
 
                 echo "# Stage 2: Building LLVM"

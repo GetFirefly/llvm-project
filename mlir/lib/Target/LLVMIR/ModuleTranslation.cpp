@@ -650,7 +650,7 @@ LogicalResult ModuleTranslation::convertGlobals() {
     }
 
     auto linkage = convertLinkageToLLVM(op.getLinkage());
-    auto tlsMode = convertThreadLocalModeToLLVM(op.getThreadLocalMode());
+    auto tlsMode = convertThreadLocalModeToLLVM(op.getTlsMode());
     auto addrSpace = op.getAddrSpace();
 
     // LLVM IR requires constant with linkage other than external or weak

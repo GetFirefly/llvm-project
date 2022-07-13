@@ -1628,7 +1628,7 @@ void GlobalOp::build(OpBuilder &builder, OperationState &result, Type type,
 
 void GlobalOp::print(OpAsmPrinter &p) {
   p << ' ' << stringifyLinkage(getLinkage()) << ' ';
-  auto tlsMode = getThreadLocalMode();
+  auto tlsMode = getTlsMode();
   if (tlsMode != ThreadLocalMode::NotThreadLocal)
     p << stringifyThreadLocalMode(tlsMode) << ' ';
   if (auto unnamedAddr = getUnnamedAddr()) {

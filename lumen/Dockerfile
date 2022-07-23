@@ -6,7 +6,7 @@
 #
 #===----------------------------------------------------------------------===//
 # Stage 1. Check out LLVM source code and run the build.
-FROM launcher.gcr.io/google/debian9:latest AS builder
+FROM launcher.gcr.io/google/debian10:latest AS builder
 LABEL maintainer "Lumen Developers"
 
 # Install build dependencies of llvm.
@@ -18,25 +18,23 @@ RUN grep deb /etc/apt/sources.list | \
 # LLDB doesn't build with Swig 3.0.9-10
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        ca-certificates \
-        gnupg \
         build-essential \
+        ca-certificates \
         chrpath \
+        file \
+        gcc-multilib \
+        git \
+        gnupg \
         libedit-dev \
+        libncurses6-dev \
         libxml2-dev \
-        libncurses5-dev \
-        python2.7-dev \
+        make \
         python3 \
         python3-dev \
-        file \
-        python \
+        swig \
+        unzip \
         wget \
-        git \
-        unzip && \
-    wget "http://http.us.debian.org/debian/pool/main/s/swig/swig_3.0.12-2_amd64.deb" && \
-    wget "http://http.us.debian.org/debian/pool/main/s/swig/swig3.0_3.0.12-2_amd64.deb" && \
-    dpkg -i swig3.0_3.0.12-2_amd64.deb && \
-    dpkg -i swig_3.0.12-2_amd64.deb && \
+        zlib1g && \
     rm -rf /var/lib/apt/lists/*
 
 # Install a newer ninja release. It seems the older version in the debian repos
@@ -93,13 +91,13 @@ FROM scratch AS dist
 COPY --from=stage1 /tmp/dist /opt/dist
 
 # Stage 2. Produce a minimal release image with build results.
-FROM launcher.gcr.io/google/debian9:latest AS release
+FROM launcher.gcr.io/google/debian10:latest AS release
 LABEL maintainer "Lumen Developers"
 
 # Install packages for minimal useful image.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        libstdc++-4.9-dev \
+        libstdc++-6-dev \
         binutils && \
     rm -rf /var/lib/apt/lists/*
 # Copy build results of stage 1 to /usr/local.

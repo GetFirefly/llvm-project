@@ -385,13 +385,14 @@ function configure_core() {
     local stage_runtimes="$enable_runtimes"
 
     if [ "1" = "$current_stage" ]; then
-        stage_targets="X86"
+        stage_targets="Native"
         stage_link_dylib="OFF"
         stage_build_dylib="OFF"
         stage_build_shared="OFF"
         stage_install_toolchain_only="ON"
         stage_projects="clang;clang-tools-extra;lld"
         stage_runtimes="compiler-rt;libcxx;libcxxabi"
+        extra_configure_flags="-DBOOTSTRAP_CMAKE_BUILD_TYPE=Release -DCLANG_ENABLE_BOOTSTRAP=ON -DCLANG_BOOTSTRAP_TARGETS=\"install-clang;install-clang-resource-headers\""
     else
         extra_configure_flags="-DLLVM_BUILD_UTILS=ON -DLLVM_INSTALL_UTILS=ON $extra_configure_flags"
         if [[ ! "$triple" =~ apple ]]; then
@@ -515,13 +516,6 @@ function build_core() {
     cp -f bin/FileCheck "${dest_dir}/usr/local/bin/"
     echo "# cp -f bin/not \"${dest_dir}/usr/local/bin/\""
     cp -f bin/not "${dest_dir}/usr/local/bin/"
-
-    pushd "${dest_dir}/usr/local/lib"
-
-    _major_version="$(echo "${release}" | cut -d. -f1)"
-    ln -sf libLLVM.dylib "libLLVM-${_major_version}-lumen-${release}".dylib
-
-    popd
 
     cd "$build_dir"
 }

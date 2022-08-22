@@ -302,6 +302,35 @@ convertOperationImpl(Operation &opInst, llvm::IRBuilderBase &builder,
           callInst->addAttributeAtIndex(llvm::AttributeList::FunctionIndex, fnAttrKind);
       }
     }
+    if (auto argAttrs = op.getAttrOfType<ArrayAttr>("arg_attrs")) {
+      for (unsigned i = 0, e = operandsRef.size(); i < e; ++i) {
+        ArrayRef<NamedAttribute> attrs;
+        if (argAttrs)
+          attrs = argAttrs[i].cast<DictionaryAttr>().getValue();
+        for (auto argAttr : attrs) {
+          StringRef argAttrKindName = argAttr.getName();
+          if (argAttrKindName == "llvm.sret") {
+              auto argPtrTy = op.getOperand(i).getType().cast<LLVMPointerType>();
+              auto argTy = moduleTranslation.convertType(argPtrTy.getElementType());
+              callInst->addAttributeAtIndex(llvm::AttributeList::FirstArgIndex + i, llvm::Attribute::get(moduleTranslation.getLLVMContext(),
+                      llvm::Attribute::StructRet, argTy));
+          } else if (argAttrKindName == "llvm.byval") {
+              auto tyAttr = argAttr.getValue().cast<TypeAttr>();
+              auto argTy = moduleTranslation.convertType(tyAttr.getValue());
+              callInst->addAttributeAtIndex(llvm::AttributeList::FirstArgIndex + i, llvm::Attribute::get(moduleTranslation.getLLVMContext(),
+                      llvm::Attribute::ByVal, argTy));
+          } else if (auto unitAttr = argAttr.getValue().dyn_cast_or_null<UnitAttr>()) {
+            llvm::Attribute::AttrKind argAttrKind;
+            if (argAttrKindName.startswith("llvm."))
+              argAttrKind = llvm::Attribute::getAttrKindFromName(argAttrKindName.drop_front(5));
+            else
+              argAttrKind = llvm::Attribute::getAttrKindFromName(argAttrKindName);
+            if (argAttrKind != llvm::Attribute::None)
+              callInst->addAttributeAtIndex(llvm::AttributeList::FirstArgIndex + i, argAttrKind);
+          }
+        }
+      }
+    }
     return callInst;
   };
 

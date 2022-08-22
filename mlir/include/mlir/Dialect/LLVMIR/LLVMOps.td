@@ -536,13 +536,27 @@ def LLVM_CallOp : LLVM_Op<"call",
   let results = (outs Variadic<LLVM_Type>);
   let builders = [
     OpBuilder<(ins "LLVMFuncOp":$func, "ValueRange":$operands,
-      CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes), [{
-      Type resultType = func.getFunctionType().getReturnType();
+      CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
+      CArg<"ArrayRef<DictionaryAttr>", "{}">:$argAttrs), [{
+      auto funcType = func.getFunctionType().cast<LLVMFunctionType>();
+      Type resultType = funcType.getReturnType();
       if (!resultType.isa<LLVM::LLVMVoidType>())
         $_state.addTypes(resultType);
       $_state.addAttribute("callee", SymbolRefAttr::get(func));
       $_state.addAttributes(attributes);
       $_state.addOperands(operands);
+      if (argAttrs.size() > 0) {
+        assert(funcType.getNumParams() == argAttrs.size() &&
+           "expected as many argument attribute lists as arguments");
+        auto nonEmptyAttrsFn = [](const ArrayRef<DictionaryAttr> &attrs) { return !attrs.empty(); };
+        auto buildFn = [](ArrayRef<DictionaryAttr> attrs) {
+          return ArrayRef<Attribute>(attrs.data(), attrs.size());
+        };
+        if (!argAttrs.empty() && llvm::any_of(argAttrs, nonEmptyAttrsFn)) {
+          ArrayAttr attrDicts = $_builder.getArrayAttr(buildFn(argAttrs));
+          $_state.addAttribute("arg_attrs", attrDicts);
+        }
+      }
     }]>,
     OpBuilder<(ins "TypeRange":$results, "StringAttr":$callee,
                    CArg<"ValueRange", "{}">:$operands), [{
@@ -553,6 +567,7 @@ def LLVM_CallOp : LLVM_Op<"call",
       build($_builder, $_state, results,
             StringAttr::get($_builder.getContext(), callee), operands);
     }]>];
+
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }

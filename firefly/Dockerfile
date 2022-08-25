@@ -1,4 +1,4 @@
-#===- lumen/Dockerfile ---------------------------------------------------===//
+#===- firefly/Dockerfile ---------------------------------------------------===//
 #
 # Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 # See https://llvm.org/LICENSE.txt for license information.
@@ -7,7 +7,7 @@
 #===----------------------------------------------------------------------===//
 # Stage 1. Check out LLVM source code and run the build.
 FROM launcher.gcr.io/google/debian10:latest AS builder
-LABEL maintainer "Lumen Developers"
+LABEL maintainer "Firefly Developers"
 
 # Install build dependencies of llvm.
 # First, Update the apt's source list and include the sources of the packages.
@@ -57,7 +57,7 @@ ARG buildscript_args
 
 # Checkout the source code.
 RUN mkdir -p /tmp/sources && \
-    git clone --depth=1 --single-branch --branch lumen https://github.com/lumen/llvm-project /tmp/sources
+    git clone --depth=1 --single-branch --branch firefly https://github.com/lumen/llvm-project /tmp/sources
 
 ADD utils/dist /tmp/scripts
 
@@ -92,7 +92,7 @@ COPY --from=stage1 /tmp/dist /opt/dist
 
 # Stage 2. Produce a minimal release image with build results.
 FROM launcher.gcr.io/google/debian10:latest AS release
-LABEL maintainer "Lumen Developers"
+LABEL maintainer "Firefly Developers"
 
 # Install packages for minimal useful image.
 RUN apt-get update && \

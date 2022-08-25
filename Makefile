@@ -24,7 +24,7 @@ clean: ## Clean up generated artifacts
 llvm: llvm-without-docs ## Build LLVM (alias for llvm-without-docs)
 
 llvm-shared: disable-docs ## Build LLVM with BUILD_SHARED_LIBS=ON
-	CC=$(CC) CXX=$(CXX) lumen/utils/dist/build-dist.sh \
+	CC=$(CC) CXX=$(CXX) firefly/utils/dist/build-dist.sh \
 		--release="$(RELEASE)" \
 		--flavor="$(FLAVOR)" \
 		--targets="$(TARGET_SUPPORT)" \
@@ -32,14 +32,14 @@ llvm-shared: disable-docs ## Build LLVM with BUILD_SHARED_LIBS=ON
 		--link-dylib \
 		--with-assertions \
 		--build-dir=$(CWD)/build/host_shared \
-		--install-dir=$(XDG_DATA_HOME)/llvm/lumen \
+		--install-dir=$(XDG_DATA_HOME)/llvm/firefly \
 		--skip-dist
 
 check-mlir:
 	cd build/host/stage2/RelWithDebInfo/stage2-$(RELEASE).obj && ninja check-mlir
 
 llvm-with-docs: enable-docs ## Build LLVM w/documentation
-	CC=$(CC) CXX=$(CXX) lumen/utils/dist/build-dist.sh \
+	CC=$(CC) CXX=$(CXX) firefly/utils/dist/build-dist.sh \
 		--release="$(RELEASE)" \
 		--flavor="$(FLAVOR)" \
 		--targets="$(TARGET_SUPPORT)" \
@@ -51,13 +51,13 @@ llvm-with-docs: enable-docs ## Build LLVM w/documentation
 
 
 llvm-without-docs: disable-docs ## Build LLVM w/o documentation
-	CC=$(CC) CXX=$(CXX) lumen/utils/dist/build-dist.sh \
+	CC=$(CC) CXX=$(CXX) firefly/utils/dist/build-dist.sh \
 		--release="$(RELEASE)" \
 		--flavor="$(FLAVOR)" \
 		--targets="$(TARGET_SUPPORT)" \
 		--with-assertions \
 		--build-dir=$(CWD)/build/host \
-		--install-dir=$(XDG_DATA_HOME)/llvm/lumen \
+		--install-dir=$(XDG_DATA_HOME)/llvm/firefly \
 		--skip-dist
 
 enable-docs:
@@ -76,7 +76,7 @@ disable-docs:
 
 dist-macos: ## Build an LLVM release distribution for x86_64-apple-darwin
 	@mkdir -p build/packages/dist && \
-	CC=$(CC) CXX=$(CXX) lumen/utils/dist/build-dist.sh \
+	CC=$(CC) CXX=$(CXX) firefly/utils/dist/build-dist.sh \
 		--release="$(RELEASE)" \
 		--flavor="$(FLAVOR)" \
 		--targets="$(TARGET_SUPPORT)" \
@@ -90,7 +90,7 @@ dist-macos: ## Build an LLVM release distribution for x86_64-apple-darwin
 
 dist-linux: ## Build an LLVM release distribution for x86_64-unknown-linux
 	@mkdir -p build/packages/ && \
-	cd lumen/ && \
+	cd firefly/ && \
 	docker build \
 		-t llvm-project:dist-$(RELEASE)-$(SHA) \
 		--target=dist \
@@ -98,8 +98,8 @@ dist-linux: ## Build an LLVM release distribution for x86_64-unknown-linux
 		utils/dist/extract-release.sh -release $(RELEASE) -sha $(SHA)
 
 docker: ## Build a Docker image containing an LLVM distribution
-	cd lumen/ && \
+	cd firefly/ && \
 	docker build \
-		-t lumen/llvm:latest \
+		-t firefly/llvm:latest \
 		--target=release \
 		--build-arg buildscript_args="-release=$(RELEASE) -with-dylib -link-dylib -flavor=$(FLAVOR) -clean-obj -j=2" .

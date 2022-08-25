@@ -437,7 +437,7 @@ function configure_core() {
             -DLLVM_INSTALL_TOOLCHAIN_ONLY="$stage_install_toolchain_only" \
             -DLLVM_ENABLE_ASSERTIONS="${enable_assertions:OFF}" \
             -DLLVM_PARALLEL_COMPILE_JOBS="$num_jobs" \
-            -DLLVM_VERSION_SUFFIX="-lumen-$release" \
+            -DLLVM_VERSION_SUFFIX="-firefly-$release" \
             -DLLVM_INCLUDE_DOCS="$enable_docs" \
             -DLLVM_BUILD_DOCS="$enable_docs" \
             -DLLVM_ENABLE_DOXYGEN="$enable_docs" \
@@ -472,7 +472,7 @@ function configure_core() {
             -DLLVM_INSTALL_TOOLCHAIN_ONLY="$stage_install_toolchain_only" \
             -DLLVM_ENABLE_ASSERTIONS="${enable_assertions:OFF}" \
             -DLLVM_PARALLEL_COMPILE_JOBS="$num_jobs" \
-            -DLLVM_VERSION_SUFFIX="-lumen-$release" \
+            -DLLVM_VERSION_SUFFIX="-firefly-$release" \
             -DLLVM_INCLUDE_DOCS="$enable_docs" \
             -DLLVM_BUILD_DOCS="$enable_docs" \
             -DLLVM_ENABLE_DOXYGEN="$enable_docs" \
